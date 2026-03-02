@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FOOTBALL.AI — Prédictions & Résultats</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10;
+    --bg2: #0f1218;
+    --bg3: #161b24;
+    --border: rgba(255,255,255,0.06);
+    --accent: #00e5a0;
+    --accent2: #ff4b6e;
+    --accent3: #4b8fff;
+    --text: #e8eaf0;
+    --muted: #5a6070;
+    --win: #00e5a0;
+    --draw: #f5c542;
+    --loss: #ff4b6e;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 60% 40% at 10% 0%, rgba(0,229,160,0.04) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 90% 100%, rgba(75,143,255,0.04) 0%, transparent 60%);
+    pointer-events:none; z-index:0;
+  }
+
+  /* ── HEADER ── */
+  header {
+    position:sticky; top:0; z-index:100;
+    background:rgba(10,12,16,0.92);
+    backdrop-filter:blur(16px);
+    border-bottom:1px solid var(--border);
+    padding:0 2rem;
+  }
+  .header-inner {
+    max-width:1400px; margin:0 auto;
+    display:flex; align-items:center; justify-content:space-between;
+    height:64px; gap:1.5rem;
+  }
+  .logo {
+    font-family:'Bebas Neue',sans-serif; font-size:1.8rem;
+    letter-spacing:.05em; color:var(--text);
+    display:flex; align-items:center; gap:.5rem; flex-shrink:0;
+  }
+  .logo span { color:var(--accent); }
+  .logo-dot {
+    width:8px; height:8px; border-radius:50%;
+    background:var(--accent); animation:pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%,100%{opacity:1;transform:scale(1)}
+    50%{opacity:.5;transform:scale(.8)}
+  }
+  nav { display:flex; gap:.25rem; }
+  nav button {
+    background:none; border:none; color:var(--muted);
+    font-family:'DM Sans',sans-serif; font-size:.875rem; font-weight:500;
+    padding:.5rem 1rem; border-radius:8px; cursor:pointer; transition:all .2s;
+  }
+  nav button:hover { color:var(--text); background:var(--bg3); }
+  nav button.active { color:var(--accent); background:rgba(0,229,160,.08); }
+  .header-right { display:flex; align-items:center; gap:1rem; flex-shrink:0; }
+  .refresh-btn {
+    background:rgba(0,229,160,.1);
+    border:1px solid rgba(0,229,160,.3);
+    color:var(--accent); padding:.4rem 1rem;
+    border-radius:8px; cursor:pointer;
+    font-size:.8rem; font-family:'DM Sans',sans-serif;
+    transition:all .2s; white-space:nowrap;
+  }
+  .refresh-btn:hover { background:rgba(0,229,160,.2); }
+  .refresh-btn:disabled { opacity:.4; cursor:default; }
+  .header-meta {
+    font-family:'JetBrains Mono',monospace;
+    font-size:.7rem; color:var(--muted); text-align:right; line-height:1.5;
+  }
+  #last-update { color:var(--accent); }
+
+  /* ── LAYOUT ── */
+  main { max-width:1400px; margin:0 auto; padding:2rem; position:relative; z-index:1; }
+
+  /* ── KPI ── */
+  .kpi-bar { display:grid; grid-template-columns:repeat(4,1fr); gap:1rem; margin-bottom:2rem; }
+  .kpi-card {
+    background:var(--bg2); border:1px solid var(--border);
+    border-radius:12px; padding:1.25rem 1.5rem; transition:border-color .2s;
+  }
+  .kpi-card:hover { border-color:rgba(255,255,255,.12); }
+  .kpi-label { font-size:.7rem; text-transform:uppercase; letter-spacing:.1em; color:var(--muted); margin-bottom:.5rem; }
+  .kpi-value { font-family:'Bebas Neue',sans-serif; font-size:2.2rem; letter-spacing:.02em; line-height:1; }
+  .kpi-value.green { color:var(--accent); }
+  .kpi-value.blue  { color:var(--accent3); }
+  .kpi-value.red   { color:var(--accent2); }
+
+  /* ── SECTIONS ── */
+  .section { display:none; }
+  .section.active { display:block; }
+  .two-col { display:grid; grid-template-columns:1fr 380px; gap:1.5rem; align-items:start; }
+
+  /* ── PANEL ── */
+  .panel { background:var(--bg2); border:1px solid var(--border); border-radius:16px; overflow:hidden; }
+  .panel-header {
+    padding:1.25rem 1.5rem; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .panel-title { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; letter-spacing:.08em; }
+  .badge {
+    font-family:'JetBrains Mono',monospace; font-size:.65rem;
+    padding:.2rem .6rem; border-radius:100px;
+    background:rgba(0,229,160,.1); color:var(--accent);
+    border:1px solid rgba(0,229,160,.2);
+  }
+
+  /* ── MATCH LIST ── */
+  .match-list { max-height:600px; overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--bg3) transparent; }
+  .match-item {
+    padding:.85rem 1.5rem; border-bottom:1px solid var(--border);
+    display:grid; grid-template-columns:90px 1fr auto 1fr auto;
+    align-items:center; gap:.75rem;
+    transition:background .15s; cursor:pointer;
+  }
+  .match-item:hover { background:var(--bg3); }
+  .match-item:last-child { border-bottom:none; }
+  .match-date { font-family:'JetBrains Mono',monospace; font-size:.68rem; color:var(--muted); }
+  .team-name { font-size:.875rem; font-weight:500; }
+  .team-name.winner { color:var(--accent); font-weight:600; }
+  .score-box {
+    font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:.1em;
+    color:var(--text); text-align:center; min-width:60px;
+    padding:.25rem .75rem; background:var(--bg3); border-radius:8px;
+  }
+  .result-badge {
+    width:28px; height:28px; border-radius:6px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:.7rem; font-weight:700; font-family:'JetBrains Mono',monospace;
+  }
+  .result-H { background:rgba(0,229,160,.15);  color:var(--win); }
+  .result-D { background:rgba(245,197,66,.15); color:var(--draw); }
+  .result-A { background:rgba(255,75,110,.15); color:var(--loss); }
+
+  /* ── PRED GRID ── */
+  .pred-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; padding:1.5rem; }
+  .pred-card {
+    background:var(--bg3); border:1px solid var(--border);
+    border-radius:12px; padding:1.25rem;
+    transition:all .2s; cursor:pointer; position:relative; overflow:hidden;
+  }
+  .pred-card:hover { border-color:rgba(0,229,160,.3); transform:translateY(-2px); box-shadow:0 8px 24px rgba(0,0,0,.3); }
+  .pred-card::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,var(--accent),var(--accent3)); opacity:0; transition:opacity .2s;
+  }
+  .pred-card:hover::before { opacity:1; }
+  .pred-date { font-family:'JetBrains Mono',monospace; font-size:.65rem; color:var(--muted); margin-bottom:.75rem; }
+  .pred-teams { display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem; gap:.5rem; }
+  .pred-team { font-size:.8rem; font-weight:600; flex:1; }
+  .pred-team.away { text-align:right; }
+  .pred-score {
+    font-family:'Bebas Neue',sans-serif; font-size:1.6rem; letter-spacing:.1em; color:var(--accent);
+    padding:.1rem .75rem; background:rgba(0,229,160,.08);
+    border-radius:8px; border:1px solid rgba(0,229,160,.15);
+  }
+  .prob-bar-container { display:flex; height:6px; border-radius:3px; overflow:hidden; gap:2px; margin-bottom:.6rem; }
+  .prob-home { background:var(--accent); border-radius:3px 0 0 3px; }
+  .prob-draw { background:var(--draw); }
+  .prob-away { background:var(--accent2); border-radius:0 3px 3px 0; }
+  .prob-labels { display:flex; justify-content:space-between; font-family:'JetBrains Mono',monospace; font-size:.65rem; }
+  .prob-label-1 { color:var(--accent); }
+  .prob-label-x { color:var(--draw); text-align:center; flex:1; }
+  .prob-label-2 { color:var(--accent2); text-align:right; }
+  .confidence-row { display:flex; align-items:center; gap:.5rem; margin-top:.75rem; }
+  .conf-label { font-size:.65rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; }
+  .conf-bar { flex:1; height:4px; background:var(--bg2); border-radius:2px; overflow:hidden; }
+  .conf-fill { height:100%; border-radius:2px; background:linear-gradient(90deg,var(--accent3),var(--accent)); }
+  .conf-value { font-family:'JetBrains Mono',monospace; font-size:.7rem; color:var(--accent); min-width:35px; text-align:right; }
+
+  /* ── STANDINGS ── */
+  .standings-table { width:100%; border-collapse:collapse; font-size:.825rem; }
+  .standings-table thead th {
+    padding:.75rem 1rem; text-align:left;
+    font-family:'JetBrains Mono',monospace; font-size:.65rem;
+    text-transform:uppercase; letter-spacing:.08em; color:var(--muted);
+    border-bottom:1px solid var(--border);
+  }
+  .standings-table th.right, .standings-table td.right { text-align:right; }
+  .standings-table tbody tr { border-bottom:1px solid var(--border); transition:background .15s; }
+  .standings-table tbody tr:hover { background:var(--bg3); }
+  .standings-table tbody tr:last-child { border-bottom:none; }
+  .standings-table td { padding:.7rem 1rem; }
+  .rank-num { font-family:'JetBrains Mono',monospace; font-size:.75rem; color:var(--muted); min-width:28px; display:inline-block; }
+  .rank-num.top3 { color:var(--accent); font-weight:600; }
+  .pts-cell { font-family:'Bebas Neue',sans-serif; font-size:1.1rem; color:var(--accent); }
+  .form-pills { display:flex; gap:3px; }
+  .form-pill {
+    width:18px; height:18px; border-radius:4px;
+    font-size:.6rem; font-weight:700;
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .form-pill.W { background:rgba(0,229,160,.2); color:var(--win); }
+  .form-pill.D { background:rgba(245,197,66,.2); color:var(--draw); }
+  .form-pill.L { background:rgba(255,75,110,.2); color:var(--loss); }
+
+  /* ── ELO ── */
+  .elo-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:1rem; padding:1.5rem; }
+  .elo-card { background:var(--bg3); border:1px solid var(--border); border-radius:10px; padding:1rem 1.25rem; display:flex; align-items:center; gap:1rem; }
+  .elo-rank { font-family:'Bebas Neue',sans-serif; font-size:1.6rem; color:var(--muted); min-width:32px; }
+  .elo-rank.top { color:var(--accent); }
+  .elo-info { flex:1; }
+  .elo-team { font-size:.8rem; font-weight:600; margin-bottom:.25rem; }
+  .elo-rating-bar { height:3px; background:var(--bg2); border-radius:2px; overflow:hidden; }
+  .elo-bar-fill { height:100%; background:linear-gradient(90deg,var(--accent3),var(--accent)); border-radius:2px; }
+  .elo-num { font-family:'JetBrains Mono',monospace; font-size:.75rem; color:var(--accent); font-weight:600; min-width:45px; text-align:right; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    position:fixed; inset:0;
+    background:rgba(0,0,0,.7); backdrop-filter:blur(4px);
+    z-index:200; display:flex; align-items:center; justify-content:center;
+    opacity:0; pointer-events:none; transition:opacity .2s;
+  }
+  .modal-overlay.open { opacity:1; pointer-events:all; }
+  .modal {
+    background:var(--bg2); border:1px solid rgba(255,255,255,.1);
+    border-radius:20px; width:600px; max-width:95vw;
+    max-height:85vh; overflow-y:auto;
+    padding:2rem; transform:scale(.95); transition:transform .2s;
+  }
+  .modal-overlay.open .modal { transform:scale(1); }
+  .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1.5rem; }
+  .modal-title { font-family:'Bebas Neue',sans-serif; font-size:1.4rem; letter-spacing:.05em; }
+  .modal-close {
+    background:var(--bg3); border:1px solid var(--border); color:var(--muted);
+    width:32px; height:32px; border-radius:8px; cursor:pointer; font-size:1.1rem;
+    display:flex; align-items:center; justify-content:center; transition:all .2s;
+  }
+  .modal-close:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+  .modal-scoreline { display:flex; align-items:center; justify-content:center; gap:1.5rem; margin:2rem 0; }
+  .modal-team { text-align:center; flex:1; }
+  .modal-team-name { font-size:1.1rem; font-weight:600; margin-bottom:.5rem; }
+  .modal-score { font-family:'Bebas Neue',sans-serif; font-size:4rem; letter-spacing:.05em; line-height:1; }
+  .modal-vs { color:var(--muted); font-size:.875rem; }
+  .stat-grid { display:grid; grid-template-columns:1fr auto 1fr; gap:.5rem 1rem; margin:1.5rem 0; }
+  .stat-val { font-family:'JetBrains Mono',monospace; font-size:.85rem; font-weight:600; text-align:center; }
+  .stat-val.home { text-align:right; color:var(--accent); }
+  .stat-val.away { text-align:left; color:var(--accent2); }
+  .stat-name { font-size:.7rem; color:var(--muted); text-transform:uppercase; letter-spacing:.08em; text-align:center; padding:.25rem 0; }
+  .h2h-list { display:flex; flex-direction:column; gap:.5rem; margin-top:.75rem; }
+  .h2h-item { display:flex; justify-content:space-between; align-items:center; padding:.5rem .75rem; background:var(--bg3); border-radius:8px; font-size:.8rem; }
+  .h2h-score { font-family:'JetBrains Mono',monospace; font-weight:600; }
+
+  /* ── FILTER ── */
+  .filter-bar { display:flex; gap:.5rem; padding:1rem 1.5rem; border-bottom:1px solid var(--border); flex-wrap:wrap; }
+  .filter-btn {
+    background:none; border:1px solid var(--border); color:var(--muted);
+    font-family:'DM Sans',sans-serif; font-size:.75rem;
+    padding:.3rem .85rem; border-radius:100px; cursor:pointer; transition:all .15s;
+  }
+  .filter-btn:hover { color:var(--text); border-color:rgba(255,255,255,.2); }
+  .filter-btn.active { background:rgba(0,229,160,.1); color:var(--accent); border-color:rgba(0,229,160,.3); }
+
+  /* ── LOADING / ERROR ── */
+  .loading { display:flex; flex-direction:column; align-items:center; justify-content:center; padding:4rem; gap:1rem; color:var(--muted); }
+  .spinner { width:40px; height:40px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .8s linear infinite; }
+  @keyframes spin { to{transform:rotate(360deg)} }
+  .error-box {
+    background:rgba(255,75,110,.08); border:1px solid rgba(255,75,110,.2);
+    border-radius:12px; padding:2rem; text-align:center; color:var(--accent2);
+    margin:2rem auto; max-width:500px;
+  }
+  .error-box code {
+    display:block; margin-top:1rem;
+    font-family:'JetBrains Mono',monospace; font-size:.8rem; color:var(--muted);
+    background:var(--bg3); padding:.75rem; border-radius:8px; text-align:left;
+  }
+  .retry-btn {
+    margin-top:1rem; padding:.5rem 1.5rem;
+    background:var(--accent); color:#000;
+    border:none; border-radius:8px; cursor:pointer; font-weight:600;
+  }
+
+  /* ── MISC ── */
+  ::-webkit-scrollbar { width:6px; }
+  ::-webkit-scrollbar-track { background:transparent; }
+  ::-webkit-scrollbar-thumb { background:var(--bg3); border-radius:3px; }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+  .fade-in { animation:fadeUp .3s ease forwards; }
+  .stagger:nth-child(1){animation-delay:.05s}
+  .stagger:nth-child(2){animation-delay:.10s}
+  .stagger:nth-child(3){animation-delay:.15s}
+  .stagger:nth-child(4){animation-delay:.20s}
+
+  @media(max-width:1100px){ .two-col{grid-template-columns:1fr} .kpi-bar{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:640px){
+    main{padding:1rem} .kpi-bar{grid-template-columns:repeat(2,1fr)}
+    .pred-grid{grid-template-columns:1fr}
+    nav button{font-size:.75rem;padding:.4rem .7rem}
+    .result-badge{display:none}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="logo">
+      <div class="logo-dot"></div>
+      FOOTBALL<span>.AI</span>
+    </div>
+    <nav>
+      <button class="active" onclick="showSection('predictions',this)">Prédictions</button>
+      <button onclick="showSection('results',this)">Résultats</button>
+      <button onclick="showSection('standings',this)">Classement</button>
+      <button onclick="showSection('elo',this)">ELO</button>
+    </nav>
+    <div class="header-right">
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshData()">↻ Actualiser</button>
+      <div class="header-meta">
+        Mis à jour<br><span id="last-update">—</span>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="kpi-bar">
+    <div class="kpi-card stagger fade-in"><div class="kpi-label">Matchs analysés</div><div class="kpi-value green" id="kpi-matches">—</div></div>
+    <div class="kpi-card stagger fade-in"><div class="kpi-label">Prédictions actives</div><div class="kpi-value blue" id="kpi-preds">—</div></div>
+    <div class="kpi-card stagger fade-in"><div class="kpi-label">Buts / match (moy.)</div><div class="kpi-value" id="kpi-goals">—</div></div>
+    <div class="kpi-card stagger fade-in"><div class="kpi-label">Saison</div><div class="kpi-value red" id="kpi-season">—</div></div>
+  </div>
+
+  <!-- PREDICTIONS -->
+  <div class="section active fade-in" id="sec-predictions">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">⚡ Prédictions IA à venir</div>
+        <span class="badge">Poisson + ELO</span>
+      </div>
+      <div class="filter-bar" id="pred-filter-bar">
+        <button class="filter-btn active" onclick="filterPreds('all',this)">Tous</button>
+        <button class="filter-btn" onclick="filterPreds('week',this)">Cette semaine</button>
+        <button class="filter-btn" onclick="filterPreds('high',this)">Haute confiance</button>
+        <button class="filter-btn" onclick="filterPreds('home',this)">Favori domicile</button>
+        <button class="filter-btn" onclick="filterPreds('draw',this)">Nul probable</button>
+      </div>
+      <div id="predictions-container" class="pred-grid">
+        <div class="loading" style="grid-column:1/-1"><div class="spinner"></div>Connexion au serveur...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="section" id="sec-results">
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">📋 Derniers résultats</div>
+          <span class="badge" id="results-count">—</span>
+        </div>
+        <div class="filter-bar" id="res-filter-bar">
+          <button class="filter-btn active" onclick="filterResults('all',this)">Tous</button>
+          <button class="filter-btn" onclick="filterResults('H',this)">Domicile gagne</button>
+          <button class="filter-btn" onclick="filterResults('D',this)">Nuls</button>
+          <button class="filter-btn" onclick="filterResults('A',this)">Extérieur gagne</button>
+        </div>
+        <div id="results-list" class="match-list">
+          <div class="loading"><div class="spinner"></div></div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:1rem;">
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">📊 Stats saison</div></div>
+          <div id="season-stats" style="padding:1.25rem;"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-header"><div class="panel-title">🏆 Meilleure attaque</div></div>
+          <div id="top-scorers" style="padding:1.25rem;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STANDINGS -->
+  <div class="section" id="sec-standings">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">🏆 Classement Premier League 2024/25</div>
+        <span class="badge">J38</span>
+      </div>
+      <div style="overflow-x:auto;">
+        <table class="standings-table">
+          <thead>
+            <tr>
+              <th>#</th><th>Équipe</th>
+              <th class="right">J</th><th class="right">G</th><th class="right">N</th><th class="right">P</th>
+              <th class="right">BP</th><th class="right">BC</th><th class="right">+/-</th><th class="right">Pts</th>
+              <th>Forme</th>
+            </tr>
+          </thead>
+          <tbody id="standings-body">
+            <tr><td colspan="11"><div class="loading"><div class="spinner"></div></div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ELO -->
+  <div class="section" id="sec-elo">
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">📡 ELO Rating — Force relative des équipes</div>
+        <span class="badge">Auto-calculé</span>
+      </div>
+      <div id="elo-container" class="elo-grid">
+        <div class="loading"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- MODAL -->
+<div class="modal-overlay" id="modal" onclick="closeModal(event)">
+  <div class="modal" id="modal-content"></div>
+</div>
+
+<script>
+const API = "http://localhost:5000/api";
+let DATA = null;
+let predFilter = 'all';
+let resFilter  = 'all';
+let pollTimer  = null;
+
+// ── LOAD & POLL ────────────────────────────────────────────────
+async function loadData() {
+  try {
+    const status = await fetch(`${API}/status`).then(r => r.json());
+
+    if (status.status === "running") {
+      setLoading("Pipeline IA en cours de calcul...");
+      if (!pollTimer) pollTimer = setTimeout(() => { pollTimer = null; loadData(); }, 2500);
+      return;
+    }
+
+    const resp = await fetch(`${API}/data`);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    DATA = await resp.json();
+    clearTimeout(pollTimer); pollTimer = null;
+    initAll();
+
+  } catch(e) {
+    showError();
+  }
+}
+
+function setLoading(msg) {
+  document.getElementById('predictions-container').innerHTML =
+    `<div class="loading" style="grid-column:1/-1"><div class="spinner"></div>${msg}</div>`;
+}
+
+function showError() {
+  document.getElementById('predictions-container').innerHTML = `
+    <div class="error-box" style="grid-column:1/-1">
+      <div style="font-size:2rem;margin-bottom:.5rem">⚠️</div>
+      <strong>Serveur non démarré</strong>
+      <p style="margin-top:.5rem;font-size:.85rem;color:var(--muted)">Lance cette commande dans un terminal :</p>
+      <code>pip install flask flask-cors numpy scipy scikit-learn<br><br>python server.py</code>
+      <p style="margin-top:.75rem;font-size:.75rem;color:var(--muted)">
+        Puis ouvre <strong style="color:var(--accent)">http://localhost:5000</strong>
+      </p>
+      <button class="retry-btn" onclick="loadData()">↻ Réessayer</button>
+    </div>`;
+}
+
+async function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ En cours...';
+  try {
+    await fetch(`${API}/refresh`);
+    setTimeout(() => { btn.disabled = false; btn.textContent = '↻ Actualiser'; loadData(); }, 500);
+  } catch(e) {
+    btn.disabled = false; btn.textContent = '↻ Actualiser';
+  }
+}
+
+// ── INIT ───────────────────────────────────────────────────────
+function initAll() {
+  const meta = DATA.meta;
+  animateNumber('kpi-matches', meta.total_matches_played);
+  animateNumber('kpi-preds',   meta.total_matches_predicted);
+  document.getElementById('kpi-goals').textContent  = meta.avg_goals_per_match;
+  document.getElementById('kpi-season').textContent = meta.season;
+  document.getElementById('last-update').textContent =
+    new Date(meta.generated_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  renderPredictions();
+  renderResultsList();
+  renderSeasonStats();
+  renderStandings();
+  renderElo();
+}
+
+function animateNumber(id, target) {
+  const el = document.getElementById(id);
+  let cur = 0;
+  const step = Math.max(1, Math.floor(target / 40));
+  const iv = setInterval(() => {
+    cur = Math.min(cur + step, target);
+    el.textContent = cur;
+    if (cur >= target) clearInterval(iv);
+  }, 25);
+}
+
+// ── PREDICTIONS ────────────────────────────────────────────────
+function filterPreds(f, btn) {
+  document.querySelectorAll('#pred-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  predFilter = f;
+  renderPredictions();
+}
+
+function renderPredictions() {
+  if (!DATA) return;
+  let preds = [...DATA.predictions];
+  const now = new Date(), weekLater = new Date(now.getTime() + 7*86400000);
+  if (predFilter === 'week') preds = preds.filter(p => new Date(p.date) <= weekLater);
+  else if (predFilter === 'high') preds = preds.filter(p => p.confidence >= 55);
+  else if (predFilter === 'home') preds = preds.filter(p => p.favorite === 'home');
+  else if (predFilter === 'draw') preds = preds.filter(p => p.favorite === 'draw');
+
+  const c = document.getElementById('predictions-container');
+  if (!preds.length) {
+    c.innerHTML = `<div class="loading" style="grid-column:1/-1;color:var(--muted)">Aucune prédiction pour ce filtre</div>`;
+    return;
+  }
+  c.innerHTML = preds.slice(0,40).map(p => {
+    const hw = Math.round(p.home_win*100), dw = Math.round(p.draw*100), aw = Math.round(p.away_win*100);
+    return `
+    <div class="pred-card fade-in" onclick="openPredModal(${p.match_id})">
+      <div class="pred-date">J${p.matchday} · ${fmt(p.date)}</div>
+      <div class="pred-teams">
+        <div class="pred-team">${p.home_team}</div>
+        <div class="pred-score">${p.most_likely_score}</div>
+        <div class="pred-team away">${p.away_team}</div>
+      </div>
+      <div class="prob-bar-container">
+        <div class="prob-home" style="width:${hw}%"></div>
+        <div class="prob-draw" style="width:${dw}%"></div>
+        <div class="prob-away" style="width:${aw}%"></div>
+      </div>
+      <div class="prob-labels">
+        <span class="prob-label-1">1 · ${hw}%</span>
+        <span class="prob-label-x">X · ${dw}%</span>
+        <span class="prob-label-2">${aw}% · 2</span>
+      </div>
+      <div class="confidence-row">
+        <span class="conf-label">Conf.</span>
+        <div class="conf-bar"><div class="conf-fill" style="width:${p.confidence}%"></div></div>
+        <span class="conf-value">${p.confidence}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── RESULTS ────────────────────────────────────────────────────
+function filterResults(f, btn) {
+  document.querySelectorAll('#res-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  resFilter = f;
+  renderResultsList();
+}
+
+function renderResultsList() {
+  if (!DATA) return;
+  let matches = DATA.recent_results;
+  if (resFilter !== 'all') matches = matches.filter(m => m.result === resFilter);
+  document.getElementById('results-count').textContent = matches.length + ' matchs';
+  document.getElementById('results-list').innerHTML = matches.map(m => {
+    const hw = m.result === 'H', aw = m.result === 'A';
+    return `
+    <div class="match-item" onclick="openResultModal(${m.id})">
+      <div class="match-date">${fmt(m.date)}<br><span style="opacity:.6">J${m.matchday}</span></div>
+      <div class="team-name ${hw?'winner':''}">${m.home_team}</div>
+      <div class="score-box">${m.home_score}–${m.away_score}</div>
+      <div class="team-name ${aw?'winner':''}" style="text-align:right">${m.away_team}</div>
+      <div class="result-badge result-${m.result}">${m.result}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSeasonStats() {
+  if (!DATA) return;
+  const m = DATA.recent_results, n = m.length;
+  const H = m.filter(x=>x.result==='H').length;
+  const D = m.filter(x=>x.result==='D').length;
+  const A = m.filter(x=>x.result==='A').length;
+  document.getElementById('season-stats').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:.75rem">
+      ${sbar('Victoires domicile',H,n,'var(--accent)')}
+      ${sbar('Matchs nuls',D,n,'var(--draw)')}
+      ${sbar('Victoires extérieur',A,n,'var(--accent2)')}
+    </div>`;
+
+  const goals = {};
+  DATA.recent_results.forEach(m => {
+    goals[m.home_team] = (goals[m.home_team]||0) + (m.home_score||0);
+    goals[m.away_team] = (goals[m.away_team]||0) + (m.away_score||0);
+  });
+  const sorted = Object.entries(goals).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  const max = sorted[0]?.[1]||1;
+  document.getElementById('top-scorers').innerHTML = sorted.map(([t,g]) => `
+    <div style="margin-bottom:.6rem">
+      <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+        <span style="font-size:.78rem">${t}</span>
+        <span style="font-family:'JetBrains Mono',monospace;font-size:.75rem;color:var(--accent)">${g}</span>
+      </div>
+      <div style="height:4px;background:var(--bg3);border-radius:2px">
+        <div style="width:${g/max*100}%;height:100%;background:var(--accent);border-radius:2px"></div>
+      </div>
+    </div>`).join('');
+}
+
+function sbar(label, val, total, color) {
+  const pct = total ? Math.round(val/total*100) : 0;
+  return `<div>
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span style="font-size:.78rem;color:var(--muted)">${label}</span>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:.75rem;color:${color}">${val} (${pct}%)</span>
+    </div>
+    <div style="height:5px;background:var(--bg3);border-radius:3px">
+      <div style="width:${pct}%;height:100%;background:${color};border-radius:3px"></div>
+    </div>
+  </div>`;
+}
+
+// ── STANDINGS ──────────────────────────────────────────────────
+function renderStandings() {
+  if (!DATA) return;
+  const formMap = {};
+  DATA.recent_results.slice(0,200).forEach(m => {
+    if (!formMap[m.home_team]) formMap[m.home_team] = [];
+    if (!formMap[m.away_team]) formMap[m.away_team] = [];
+    if (formMap[m.home_team].length < 5) formMap[m.home_team].push(m.result==='H'?'W':m.result==='D'?'D':'L');
+    if (formMap[m.away_team].length < 5) formMap[m.away_team].push(m.result==='A'?'W':m.result==='D'?'D':'L');
+  });
+  document.getElementById('standings-body').innerHTML = DATA.standings.map(t => {
+    const form = (formMap[t.team]||[]).slice(-5);
+    return `
+    <tr>
+      <td><span class="rank-num ${t.rank<=3?'top3':''}">${t.rank}</span></td>
+      <td style="font-weight:500">${t.team}</td>
+      <td class="right" style="color:var(--muted)">${t.played}</td>
+      <td class="right" style="color:var(--win)">${t.wins}</td>
+      <td class="right" style="color:var(--draw)">${t.draws}</td>
+      <td class="right" style="color:var(--loss)">${t.losses}</td>
+      <td class="right">${t.goals_for}</td>
+      <td class="right">${t.goals_against}</td>
+      <td class="right" style="color:${t.goal_diff>0?'var(--accent)':t.goal_diff<0?'var(--accent2)':'var(--muted)'}">
+        ${t.goal_diff>0?'+':''}${t.goal_diff}</td>
+      <td class="right"><span class="pts-cell">${t.points}</span></td>
+      <td><div class="form-pills">${form.map(r=>`<div class="form-pill ${r}">${r}</div>`).join('')}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ── ELO ───────────────────────────────────────────────────────
+function renderElo() {
+  if (!DATA) return;
+  const elo = DATA.elo_rankings;
+  const min = elo[elo.length-1]?.rating||1400, max = elo[0]?.rating||1600;
+  document.getElementById('elo-container').innerHTML = elo.map((e,i) => `
+    <div class="elo-card">
+      <div class="elo-rank ${i<3?'top':''}">${i+1}</div>
+      <div class="elo-info">
+        <div class="elo-team">${e.team}</div>
+        <div class="elo-rating-bar">
+          <div class="elo-bar-fill" style="width:${((e.rating-min)/(max-min)*100).toFixed(1)}%"></div>
+        </div>
+      </div>
+      <div class="elo-num">${e.rating}</div>
+    </div>`).join('');
+}
+
+// ── MODALS ─────────────────────────────────────────────────────
+function openPredModal(matchId) {
+  const p = DATA.predictions.find(x => x.match_id === matchId);
+  if (!p) return;
+  const hw = Math.round(p.home_win*100), dw = Math.round(p.draw*100), aw = Math.round(p.away_win*100);
+  const h2hItems = (p.h2h?.last_meetings||[]).map(m =>
+    `<div class="h2h-item">
+      <span style="font-size:.75rem;color:var(--muted)">${m.date}</span>
+      <span>${m.home} vs ${m.away}</span>
+      <span class="h2h-score">${m.score}</span>
+    </div>`).join('');
+
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-header">
+      <div class="modal-title">Analyse du match</div>
+      <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">×</button>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-align:center">
+      J${p.matchday} · ${fmt(p.date)} · ${p.competition}
+    </div>
+    <div class="modal-scoreline">
+      <div class="modal-team">
+        <div class="modal-team-name">${p.home_team}</div>
+        <div class="modal-score" style="color:var(--accent)">${p.expected_home_goals}</div>
+      </div>
+      <div class="modal-vs">xG prédit</div>
+      <div class="modal-team">
+        <div class="modal-score" style="color:var(--accent2)">${p.expected_away_goals}</div>
+        <div class="modal-team-name">${p.away_team}</div>
+      </div>
+    </div>
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem">Score probable : </span>
+      <span style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--accent)">${p.most_likely_score}</span>
+      <span style="display:block;font-size:.75rem;color:var(--muted);margin-top:.25rem">Probabilité : ${Math.round(p.most_likely_score_prob*100)}%</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:.5rem;text-align:center;margin-bottom:1rem">
+      <div><div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--accent)">${hw}%</div><div style="font-size:.7rem;color:var(--muted)">Domicile</div></div>
+      <div><div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--draw)">${dw}%</div><div style="font-size:.7rem;color:var(--muted)">Nul</div></div>
+      <div><div style="font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--accent2)">${aw}%</div><div style="font-size:.7rem;color:var(--muted)">Extérieur</div></div>
+    </div>
+    <div class="prob-bar-container" style="height:10px;margin:0 0 1.5rem">
+      <div class="prob-home" style="width:${hw}%"></div>
+      <div class="prob-draw" style="width:${dw}%"></div>
+      <div class="prob-away" style="width:${aw}%"></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-val home">${p.elo_home}</div><div class="stat-name">ELO</div><div class="stat-val away">${p.elo_away}</div>
+      <div class="stat-val home">${p.form_home?.form_score||'—'}%</div><div class="stat-name">Forme</div><div class="stat-val away">${p.form_away?.form_score||'—'}%</div>
+      <div class="stat-val home">${p.form_home?.avg_goals_scored||'—'}</div><div class="stat-name">Buts/match</div><div class="stat-val away">${p.form_away?.avg_goals_scored||'—'}</div>
+      <div class="stat-val home">${p.form_home?.form_string||'—'}</div><div class="stat-name">5 derniers</div><div class="stat-val away">${p.form_away?.form_string||'—'}</div>
+    </div>
+    ${p.h2h?.total_games > 0 ? `
+    <div style="margin-top:1rem">
+      <div style="font-size:.75rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem">
+        H2H (${p.h2h.total_games} matchs) · ${p.h2h.home_wins}V ${p.h2h.draws}N ${p.h2h.away_wins}D
+      </div>
+      <div class="h2h-list">${h2hItems}</div>
+    </div>` : ''}
+    <div class="confidence-row" style="margin-top:1.25rem">
+      <span class="conf-label" style="font-size:.75rem">Confiance IA</span>
+      <div class="conf-bar" style="height:8px;border-radius:4px">
+        <div class="conf-fill" style="width:${p.confidence}%;height:100%;border-radius:4px"></div>
+      </div>
+      <span class="conf-value" style="font-size:.9rem">${p.confidence}%</span>
+    </div>`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function openResultModal(matchId) {
+  const m = DATA.recent_results.find(r => r.id === matchId);
+  if (!m) return;
+  const hw = m.result==='H', aw = m.result==='A';
+  document.getElementById('modal-content').innerHTML = `
+    <div class="modal-header">
+      <div class="modal-title">Résultat du match</div>
+      <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">×</button>
+    </div>
+    <div style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-align:center">
+      J${m.matchday} · ${fmt(m.date)} · ${m.competition}
+    </div>
+    <div class="modal-scoreline">
+      <div class="modal-team">
+        <div class="modal-team-name">${m.home_team}</div>
+        <div class="modal-score" style="color:${hw?'var(--accent)':aw?'var(--loss)':'var(--draw)'}">${m.home_score}</div>
+      </div>
+      <div class="modal-vs">—</div>
+      <div class="modal-team">
+        <div class="modal-score" style="color:${aw?'var(--accent)':hw?'var(--loss)':'var(--draw)'}">${m.away_score}</div>
+        <div class="modal-team-name">${m.away_team}</div>
+      </div>
+    </div>
+    ${m.home_xg ? `
+    <div class="stat-grid">
+      <div class="stat-val home">${m.home_xg}</div><div class="stat-name">xG</div><div class="stat-val away">${m.away_xg}</div>
+      ${m.home_possession ? `<div class="stat-val home">${m.home_possession}%</div><div class="stat-name">Possession</div><div class="stat-val away">${m.away_possession}%</div>` : ''}
+      ${m.home_shots ? `<div class="stat-val home">${m.home_shots}</div><div class="stat-name">Tirs</div><div class="stat-val away">${m.away_shots}</div>` : ''}
+    </div>` : '<div style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:1rem">Stats détaillées non disponibles</div>'}`;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal(e) {
+  if (e.target.id === 'modal') document.getElementById('modal').classList.remove('open');
+}
+
+// ── NAV ───────────────────────────────────────────────────────
+function showSection(name, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.add('active');
+  if (btn) btn.classList.add('active');
+  else document.querySelector(`nav button[onclick*="${name}"]`)?.classList.add('active');
+}
+
+// ── UTILS ─────────────────────────────────────────────────────
+function fmt(d) {
+  if (!d) return '—';
+  return new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('modal').classList.remove('open');
+});
+
+// Init
+loadData();
+</script>
+</body>
+</html>
