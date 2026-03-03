@@ -128,79 +128,86 @@ def collect_data(force=False):
     if API_KEY != "VOTRE_CLE_API_ICI":
         _collect_from_api()
     else:
-        _generate_demo()
+        _collect_from_thesportsdb()
 
 
-def _generate_demo():
-    print("[DEMO] Génération des données (dates relatives à aujourd'hui)...")
-    teams = [
-        "Manchester City", "Arsenal", "Liverpool", "Chelsea",
-        "Tottenham", "Manchester United", "Newcastle", "Brighton",
-        "Aston Villa", "West Ham", "Brentford", "Crystal Palace",
-        "Fulham", "Wolves", "Everton", "Nottm Forest",
-        "Bournemouth", "Luton", "Burnley", "Sheffield United"
-    ]
+def _collect_from_thesportsdb():
+    """Collecte de VRAIS matchs via TheSportsDB (gratuit, sans inscription)."""
+    import requests as req
+
+    LEAGUES = {
+        4328: ("Premier League", 38),
+        4334: ("Ligue 1", 34),
+        4335: ("La Liga", 38),
+        4332: ("Serie A", 38),
+        4331: ("Bundesliga", 34),
+    }
+    season_str = f"{CURRENT_SEASON}-{CURRENT_SEASON + 1}"
+    print(f"[API] Collecte depuis TheSportsDB (saison {season_str})...")
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM matches")
     c.execute("DELETE FROM predictions")
     c.execute("DELETE FROM elo_ratings")
-    match_id = 1
-    today = datetime.now()
 
-    # 25 journées passées (résultats connus) — derniers ~6 mois
-    for matchday in range(1, 26):
-        base_date = today - timedelta(weeks=26 - matchday)
-        shuffled = teams.copy()
-        random.shuffle(shuffled)
-        for i in range(0, len(shuffled), 2):
-            home, away = shuffled[i], shuffled[i + 1]
-            hg = max(0, min(7, int(random.gauss(1.5, 1.1))))
-            ag = max(0, min(6, int(random.gauss(1.1, 1.0))))
-            hxg = round(max(0.1, hg + random.uniform(-0.4, 0.7)), 2)
-            axg = round(max(0.1, ag + random.uniform(-0.4, 0.6)), 2)
-            hp  = round(random.uniform(38, 65), 1)
-            c.execute("""
-                INSERT OR REPLACE INTO matches
-                (id, competition, matchday, date, home_team, away_team,
-                 home_score, away_score, status, home_xg, away_xg,
-                 home_shots, away_shots, home_shots_on_target, away_shots_on_target,
-                 home_possession, away_possession, updated_at)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """, (
-                match_id, "Premier League", matchday,
-                (base_date + timedelta(days=random.randint(0, 2))).strftime("%Y-%m-%d"),
-                home, away, hg, ag, "FINISHED",
-                hxg, axg,
-                random.randint(6, 20), random.randint(4, 16),
-                random.randint(2, 8), random.randint(1, 7),
-                hp, round(100 - hp, 1),
-                datetime.now().isoformat()
-            ))
-            match_id += 1
+    total = 0
+    for league_id, (league_name, max_rounds) in LEAGUES.items():
+        league_total = 0
+        for round_num in range(1, max_rounds + 1):
+            try:
+                r = req.get(
+                    "https://www.thesportsdb.com/api/v1/json/3/eventsround.php",
+                    params={"id": league_id, "r": round_num, "s": season_str},
+                    timeout=10,
+                )
+                if r.status_code == 429:
+                    print(f"[API] Rate limit → pause 5s...")
+                    time.sleep(5)
+                    r = req.get(
+                        "https://www.thesportsdb.com/api/v1/json/3/eventsround.php",
+                        params={"id": league_id, "r": round_num, "s": season_str},
+                        timeout=10,
+                    )
+                if r.status_code != 200:
+                    continue
 
-    # 13 journées futures (à prédire) — prochaines semaines
-    for matchday in range(26, 39):
-        base_date = today + timedelta(weeks=matchday - 25)
-        shuffled = teams.copy()
-        random.shuffle(shuffled)
-        for i in range(0, len(shuffled), 2):
-            home, away = shuffled[i], shuffled[i + 1]
-            c.execute("""
-                INSERT OR REPLACE INTO matches
-                (id, competition, matchday, date, home_team, away_team, status, updated_at)
-                VALUES (?,?,?,?,?,?,?,?)
-            """, (
-                match_id, "Premier League", matchday,
-                (base_date + timedelta(days=random.randint(0, 2))).strftime("%Y-%m-%d"),
-                home, away, "SCHEDULED",
-                datetime.now().isoformat()
-            ))
-            match_id += 1
+                events = r.json().get("events") or []
+                for e in events:
+                    hs = e.get("intHomeScore")
+                    aws = e.get("intAwayScore")
+                    if hs is not None and aws is not None:
+                        status = "FINISHED"
+                        hs, aws = int(hs), int(aws)
+                    else:
+                        status = "SCHEDULED"
+                        hs = aws = None
+
+                    c.execute("""
+                        INSERT OR REPLACE INTO matches
+                        (id, competition, matchday, date, home_team, away_team,
+                         home_score, away_score, status, updated_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                    """, (
+                        int(e["idEvent"]), league_name, round_num,
+                        e.get("dateEvent", ""),
+                        e.get("strHomeTeam", ""),
+                        e.get("strAwayTeam", ""),
+                        hs, aws, status,
+                        datetime.now().isoformat(),
+                    ))
+                    league_total += 1
+
+                time.sleep(1)
+            except Exception as ex:
+                print(f"[API] Erreur {league_name} J{round_num}: {ex}")
+
+        print(f"[API] {league_name} → {league_total} matchs")
+        total += league_total
 
     conn.commit()
     conn.close()
-    print(f"[DEMO] {match_id - 1} matchs générés.")
+    print(f"[API] Total : {total} matchs réels récupérés.")
 
 
 def _collect_from_api():
