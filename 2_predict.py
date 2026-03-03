@@ -425,13 +425,13 @@ def run_predictions():
             "competition": m['competition'],
             "home_team": home,
             "away_team": away,
-            "predicted_home_goals": poisson_pred['expected_home_goals'],
-            "predicted_away_goals": poisson_pred['expected_away_goals'],
+            "expected_home_goals": poisson_pred['expected_home_goals'],
+            "expected_away_goals": poisson_pred['expected_away_goals'],
             "most_likely_score": poisson_pred['most_likely_score'],
             "most_likely_score_prob": poisson_pred['most_likely_score_prob'],
-            "prob_home_win": poisson_pred['home_win'],
-            "prob_draw": poisson_pred['draw'],
-            "prob_away_win": poisson_pred['away_win'],
+            "home_win": poisson_pred['home_win'],
+            "draw": poisson_pred['draw'],
+            "away_win": poisson_pred['away_win'],
             "elo_home": round(elo_home),
             "elo_away": round(elo_away),
             "form_home": form_home,
@@ -485,7 +485,7 @@ def run_predictions():
     for pred in predictions[:3]:
         print(f"\n   {pred['home_team']} vs {pred['away_team']} ({pred['date']})")
         print(f"   Score probable : {pred['most_likely_score']} | Confiance : {pred['confidence']}%")
-        print(f"   1: {pred['prob_home_win']:.1%} | X: {pred['prob_draw']:.1%} | 2: {pred['prob_away_win']:.1%}")
+        print(f"   1: {pred['home_win']:.1%} | X: {pred['draw']:.1%} | 2: {pred['away_win']:.1%}")
     
     print("\n🚀 Lance maintenant : python 3_export_json.py")
 
