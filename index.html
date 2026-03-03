@@ -813,7 +813,7 @@ function openPredModal(matchId) {
 
   const h2hItems = (p.h2h?.last_meetings||[]).map(m =>
     `<div class="h2h-item">
-      <span style="font-size:.75rem;color:var(--muted)">${m.date}</span>
+      <span style="font-size:.75rem;color:var(--muted)">${fmt(m.date)}</span>
       <span>${m.home} vs ${m.away}</span>
       <span class="h2h-score">${m.score}</span>
     </div>`).join('');
@@ -961,7 +961,7 @@ function showSection(name, btn) {
 // ── UTILS ─────────────────────────────────────────────────────
 function fmt(d) {
   if (!d) return '—';
-  return new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'short'});
+  return new Date(d).toLocaleDateString('fr-FR',{day:'2-digit',month:'short',year:'numeric'});
 }
 
 document.addEventListener('keydown', e => {
