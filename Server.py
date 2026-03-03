@@ -14,7 +14,7 @@
 
 from flask import Flask, jsonify, send_from_directory
 from flask_cors import CORS
-import sqlite3, json, threading, time, math, random
+import sqlite3, json, threading, time, math, random, os
 from datetime import datetime, timedelta
 from collections import defaultdict
 import numpy as np
@@ -28,13 +28,31 @@ last_update = None
 is_running = False
 
 # ═══════════════════════════════════════════════════════════════
-#  CLÉS API (optionnel)
+#  CONFIGURATION
 # ═══════════════════════════════════════════════════════════════
 
-# Inscris-toi gratuitement sur https://www.football-data.org/
-# puis remplace la valeur ci-dessous par ta clé.
-# Sans clé → données de démonstration générées automatiquement.
-API_KEY = "VOTRE_CLE_API_ICI"
+def _load_env():
+    """Charge les variables depuis .env si le fichier existe."""
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+_load_env()
+
+# Clé API football-data.org (gratuit : https://www.football-data.org/)
+#   → Variable d'environnement FOOTBALL_API_KEY
+#   → ou fichier .env avec FOOTBALL_API_KEY=ta_cle
+#   → ou remplace directement ci-dessous
+API_KEY = os.environ.get("FOOTBALL_API_KEY", "VOTRE_CLE_API_ICI")
+
+# Auto-détection saison courante (août → mai)
+_now = datetime.now()
+CURRENT_SEASON = _now.year if _now.month >= 8 else _now.year - 1
 
 # ═══════════════════════════════════════════════════════════════
 #  BASE DE DONNÉES
@@ -91,11 +109,21 @@ def collect_data(force=False):
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM matches")
     count = c.fetchone()[0]
-    conn.close()
 
+    # Vérifier si les données sont périmées (matchs futurs dans le passé)
     if count > 0 and not force:
-        print(f"[DB] {count} matchs déjà en base.")
-        return
+        c.execute("SELECT MAX(date) FROM matches WHERE status='SCHEDULED'")
+        row = c.fetchone()
+        max_date = row[0] if row else None
+        if max_date and max_date < datetime.now().strftime("%Y-%m-%d"):
+            print(f"[DB] Données périmées (dernier match prévu : {max_date}). Régénération...")
+            force = True
+        else:
+            print(f"[DB] {count} matchs déjà en base.")
+            conn.close()
+            return
+
+    conn.close()
 
     if API_KEY != "VOTRE_CLE_API_ICI":
         _collect_from_api()
@@ -104,7 +132,7 @@ def collect_data(force=False):
 
 
 def _generate_demo():
-    print("[DEMO] Génération des données...")
+    print("[DEMO] Génération des données (dates relatives à aujourd'hui)...")
     teams = [
         "Manchester City", "Arsenal", "Liverpool", "Chelsea",
         "Tottenham", "Manchester United", "Newcastle", "Brighton",
@@ -115,11 +143,14 @@ def _generate_demo():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute("DELETE FROM matches")
+    c.execute("DELETE FROM predictions")
+    c.execute("DELETE FROM elo_ratings")
     match_id = 1
+    today = datetime.now()
 
-    # Journées passées (résultats connus)
+    # 25 journées passées (résultats connus) — derniers ~6 mois
     for matchday in range(1, 26):
-        base_date = datetime(2024, 8, 10) + timedelta(weeks=matchday - 1)
+        base_date = today - timedelta(weeks=26 - matchday)
         shuffled = teams.copy()
         random.shuffle(shuffled)
         for i in range(0, len(shuffled), 2):
@@ -148,9 +179,9 @@ def _generate_demo():
             ))
             match_id += 1
 
-    # Journées futures (à prédire)
+    # 13 journées futures (à prédire) — prochaines semaines
     for matchday in range(26, 39):
-        base_date = datetime(2025, 2, 1) + timedelta(weeks=matchday - 26)
+        base_date = today + timedelta(weeks=matchday - 25)
         shuffled = teams.copy()
         random.shuffle(shuffled)
         for i in range(0, len(shuffled), 2):
@@ -174,18 +205,32 @@ def _generate_demo():
 
 def _collect_from_api():
     import requests as req
-    print("[API] Collecte depuis football-data.org...")
+    print(f"[API] Collecte depuis football-data.org (saison {CURRENT_SEASON})...")
     headers = {"X-Auth-Token": API_KEY}
-    competitions = {"PL": "Premier League", "FL1": "Ligue 1", "PD": "La Liga"}
+    competitions = {
+        "PL": "Premier League",
+        "FL1": "Ligue 1",
+        "PD": "La Liga",
+        "BL1": "Bundesliga",
+        "SA": "Serie A",
+    }
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
+    total = 0
 
     for code, name in competitions.items():
         try:
             r = req.get(
                 f"https://api.football-data.org/v4/competitions/{code}/matches",
-                headers=headers, params={"season": 2024}, timeout=10
+                headers=headers, params={"season": CURRENT_SEASON}, timeout=15
             )
+            if r.status_code == 403:
+                print(f"[API] {code} → accès refusé (plan gratuit = PL seulement)")
+                continue
+            if r.status_code == 429:
+                print("[API] Rate limit → attente 60s...")
+                time.sleep(60)
+                continue
             if r.status_code != 200:
                 print(f"[API] {code} → HTTP {r.status_code}")
                 continue
@@ -205,6 +250,7 @@ def _collect_from_api():
                     m.get("status"),
                     datetime.now().isoformat()
                 ))
+            total += len(matches)
             print(f"[API] {name} → {len(matches)} matchs")
             time.sleep(6)
         except Exception as e:
@@ -212,6 +258,7 @@ def _collect_from_api():
 
     conn.commit()
     conn.close()
+    print(f"[API] Total : {total} matchs récupérés.")
 
 # ═══════════════════════════════════════════════════════════════
 #  MODÈLES IA
@@ -587,7 +634,7 @@ def api_data():
             "total_goals":             total_goals,
             "avg_goals_per_match":     round(total_goals / n, 2) if n else 0,
             "generated_at":            last_update or datetime.now().isoformat(),
-            "season":                  2024
+            "season":                  CURRENT_SEASON
         },
         "standings":    standings,
         "elo_rankings": elo_raw,
