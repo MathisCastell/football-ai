@@ -273,14 +273,53 @@ def predict_match(home, away, attack, defense, avg, home_adv):
     mat /= mat.sum()
 
     bi, bj = np.unravel_index(np.argmax(mat), mat.shape)
+    p_home = round(float(np.sum(np.tril(mat, -1))), 4)
+    p_draw = round(float(np.trace(mat)), 4)
+    p_away = round(float(np.sum(np.triu(mat, 1))), 4)
+
+    # Over/Under
+    over_15 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 2)), 4)
+    over_25 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 3)), 4)
+    over_35 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 4)), 4)
+
+    # BTTS (Both Teams To Score)
+    btts_yes = round(float(sum(mat[i][j] for i in range(1, 9) for j in range(1, 9))), 4)
+
+    # Top 5 scores les plus probables
+    flat = [(float(mat[i][j]), f"{i}-{j}") for i in range(9) for j in range(9)]
+    flat.sort(reverse=True)
+    top_scores = [{"score": s, "prob": round(p, 4)} for p, s in flat[:5]]
+
+    # Cotes justes (fair odds = 1 / probabilité)
+    odds_1 = round(1 / max(0.01, p_home), 2)
+    odds_x = round(1 / max(0.01, p_draw), 2)
+    odds_2 = round(1 / max(0.01, p_away), 2)
+
+    # Double chance
+    dc_1x = round(p_home + p_draw, 4)
+    dc_x2 = round(p_draw + p_away, 4)
+    dc_12 = round(p_home + p_away, 4)
+
     return {
-        "home_win":               round(float(np.sum(np.tril(mat, -1))), 4),
-        "draw":                   round(float(np.trace(mat)), 4),
-        "away_win":               round(float(np.sum(np.triu(mat, 1))), 4),
+        "home_win":               p_home,
+        "draw":                   p_draw,
+        "away_win":               p_away,
         "expected_home_goals":    round(lh, 2),
         "expected_away_goals":    round(la, 2),
         "most_likely_score":      f"{bi}-{bj}",
         "most_likely_score_prob": round(float(mat[bi][bj]), 4),
+        "over_15":                over_15,
+        "over_25":                over_25,
+        "over_35":                over_35,
+        "btts_yes":               btts_yes,
+        "btts_no":                round(1 - btts_yes, 4),
+        "odds_1":                 odds_1,
+        "odds_x":                 odds_x,
+        "odds_2":                 odds_2,
+        "double_chance_1x":       dc_1x,
+        "double_chance_x2":       dc_x2,
+        "double_chance_12":       dc_12,
+        "top_scores":             top_scores,
     }
 
 
@@ -392,6 +431,23 @@ def run_pipeline(force=False):
             probs = {"home": pp["home_win"], "draw": pp["draw"], "away": pp["away_win"]}
             favorite = max(probs, key=probs.get)
 
+            # Conseils paris
+            tips = []
+            if pp["home_win"] > 0.55:
+                tips.append({"type": "1", "label": f"Victoire {home}", "odds": pp["odds_1"], "prob": pp["home_win"]})
+            elif pp["away_win"] > 0.55:
+                tips.append({"type": "2", "label": f"Victoire {away}", "odds": pp["odds_2"], "prob": pp["away_win"]})
+            elif pp["double_chance_1x"] > 0.72:
+                tips.append({"type": "1X", "label": f"{home} ou Nul", "odds": round(1 / max(0.01, pp["double_chance_1x"]), 2), "prob": pp["double_chance_1x"]})
+            elif pp["double_chance_x2"] > 0.72:
+                tips.append({"type": "X2", "label": f"Nul ou {away}", "odds": round(1 / max(0.01, pp["double_chance_x2"]), 2), "prob": pp["double_chance_x2"]})
+            if pp["over_25"] > 0.58:
+                tips.append({"type": "O2.5", "label": "Plus de 2.5 buts", "odds": round(1 / max(0.01, pp["over_25"]), 2), "prob": pp["over_25"]})
+            elif pp["over_25"] < 0.42:
+                tips.append({"type": "U2.5", "label": "Moins de 2.5 buts", "odds": round(1 / max(0.01, 1 - pp["over_25"]), 2), "prob": round(1 - pp["over_25"], 4)})
+            if pp["btts_yes"] > 0.55:
+                tips.append({"type": "BTTS Oui", "label": "Les 2 marquent", "odds": round(1 / max(0.01, pp["btts_yes"]), 2), "prob": pp["btts_yes"]})
+
             pred = {
                 "match_id":   m["id"],
                 "date":       m["date"],
@@ -407,6 +463,7 @@ def run_pipeline(force=False):
                 "h2h":        h2h,
                 "confidence": conf,
                 "favorite":   favorite,
+                "betting_tips": tips,
                 "generated_at": datetime.now().isoformat()
             }
             c.execute(

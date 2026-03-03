@@ -25,7 +25,7 @@ import json
 from datetime import datetime, timedelta
 
 # ─── CONFIG ────────────────────────────────────────────────────
-API_KEY = "e5a6b4d67f3d478ebad1a323a7089e70"  # → https://www.football-data.org/
+API_KEY = "VOTRE_CLE_API_ICI"  # → https://www.football-data.org/
 DB_PATH = "football.db"
 COMPETITIONS = {
     "PL":  "Premier League",
