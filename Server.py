@@ -112,7 +112,7 @@ def collect_data(force=False):
 
     # Vérifier si les données sont périmées (matchs futurs dans le passé)
     if count > 0 and not force:
-        c.execute("SELECT MAX(date) FROM matches WHERE status='SCHEDULED'")
+        c.execute("SELECT MAX(date) FROM matches WHERE status IN ('SCHEDULED','TIMED')")
         row = c.fetchone()
         max_date = row[0] if row else None
         if max_date and max_date < datetime.now().strftime("%Y-%m-%d"):
@@ -463,7 +463,7 @@ def run_pipeline(force=False):
         all_m = [dict(r) for r in c.fetchall()]
 
         finished  = [m for m in all_m if m["status"] == "FINISHED" and m["home_score"] is not None]
-        scheduled = [m for m in all_m if m["status"] == "SCHEDULED"]
+        scheduled = [m for m in all_m if m["status"] in ("SCHEDULED", "TIMED")]
         print(f"[PIPELINE] {len(finished)} terminés / {len(scheduled)} à prédire")
 
         # Entraîner les modèles

@@ -357,7 +357,7 @@ def run_predictions():
     all_matches = [dict(row) for row in c.fetchall()]
     
     finished = [m for m in all_matches if m['status'] == 'FINISHED']
-    scheduled = [m for m in all_matches if m['status'] == 'SCHEDULED']
+    scheduled = [m for m in all_matches if m['status'] in ('SCHEDULED', 'TIMED')]
     
     print(f"\n📊 Matchs terminés : {len(finished)}")
     print(f"📅 Matchs à prédire : {len(scheduled)}")
