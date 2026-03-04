@@ -51,6 +51,7 @@ def load_env():
 load_env()
 
 DISCORD_TOKEN = os.environ.get("DISCORD_TOKEN", "")
+GUILD_ID = os.environ.get("DISCORD_GUILD_ID", "")  # ID de ton serveur pour sync instantanée
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "football.db")
 
 COMPETITIONS = {
@@ -479,8 +480,17 @@ def build_elo_embed(rankings):
 async def on_ready():
     print(f"✅ Bot connecté : {bot.user}")
     try:
-        synced = await bot.tree.sync()
-        print(f"✅ {len(synced)} commandes slash synchronisées")
+        if GUILD_ID:
+            # Sync sur le serveur spécifique = INSTANTANÉ
+            guild = discord.Object(id=int(GUILD_ID))
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+            print(f"✅ {len(synced)} commandes synchronisées sur le serveur {GUILD_ID}")
+        else:
+            # Sync global = peut prendre jusqu'à 1h
+            synced = await bot.tree.sync()
+            print(f"✅ {len(synced)} commandes synchronisées (global, peut prendre ~1h)")
+            print("   💡 Ajoute DISCORD_GUILD_ID dans .env pour une sync instantanée")
     except Exception as e:
         print(f"❌ Erreur sync: {e}")
 
