@@ -80,6 +80,16 @@ def init_db():
             away_shots_on_target INTEGER,
             home_possession REAL,
             away_possession REAL,
+            home_corners INTEGER,
+            away_corners INTEGER,
+            home_fouls INTEGER,
+            away_fouls INTEGER,
+            home_yellow_cards INTEGER,
+            away_yellow_cards INTEGER,
+            home_red_cards INTEGER,
+            away_red_cards INTEGER,
+            home_formation TEXT,
+            away_formation TEXT,
             updated_at TEXT
         )
     """)
@@ -97,6 +107,40 @@ def init_db():
             updated_at TEXT
         )
     """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS lineups (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            match_id INTEGER,
+            team TEXT,
+            player_name TEXT,
+            position TEXT,
+            is_starter INTEGER DEFAULT 1,
+            FOREIGN KEY (match_id) REFERENCES matches(id)
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS injuries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            team TEXT,
+            player_name TEXT,
+            injury_type TEXT,
+            detail TEXT,
+            competition TEXT,
+            updated_at TEXT
+        )
+    """)
+    # Migration : ajout colonnes manquantes pour anciennes BDD
+    for col, coltype in [
+        ("home_corners", "INTEGER"), ("away_corners", "INTEGER"),
+        ("home_fouls", "INTEGER"), ("away_fouls", "INTEGER"),
+        ("home_yellow_cards", "INTEGER"), ("away_yellow_cards", "INTEGER"),
+        ("home_red_cards", "INTEGER"), ("away_red_cards", "INTEGER"),
+        ("home_formation", "TEXT"), ("away_formation", "TEXT"),
+    ]:
+        try:
+            c.execute(f"ALTER TABLE matches ADD COLUMN {col} {coltype}")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -131,6 +175,13 @@ def collect_data(force=False):
         _collect_from_thesportsdb()
 
 
+def _parse_lineup_string(raw):
+    """Parse une chaîne de lineup TheSportsDB en liste de noms."""
+    if not raw:
+        return []
+    return [n.strip() for n in raw.replace("|", ";").split(";") if n.strip()]
+
+
 def _collect_from_thesportsdb():
     """Collecte de VRAIS matchs via TheSportsDB (gratuit, sans inscription)."""
     import requests as req
@@ -150,8 +201,12 @@ def _collect_from_thesportsdb():
     c.execute("DELETE FROM matches")
     c.execute("DELETE FROM predictions")
     c.execute("DELETE FROM elo_ratings")
+    c.execute("DELETE FROM lineups")
+    c.execute("DELETE FROM injuries")
 
     total = 0
+    finished_ids = []
+
     for league_id, (league_name, max_rounds) in LEAGUES.items():
         league_total = 0
         for round_num in range(1, max_rounds + 1):
@@ -183,19 +238,59 @@ def _collect_from_thesportsdb():
                         status = "SCHEDULED"
                         hs = aws = None
 
+                    # Extraire les stats avancées de l'événement
+                    _int = lambda k: int(e[k]) if e.get(k) not in (None, "") else None
+                    _str = lambda k: e.get(k) or None
+
+                    match_id = int(e["idEvent"])
+                    home_team = e.get("strHomeTeam", "")
+                    away_team = e.get("strAwayTeam", "")
+
                     c.execute("""
                         INSERT OR REPLACE INTO matches
                         (id, competition, matchday, date, home_team, away_team,
-                         home_score, away_score, status, updated_at)
-                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                         home_score, away_score, status,
+                         home_shots, away_shots,
+                         home_yellow_cards, away_yellow_cards,
+                         home_red_cards, away_red_cards,
+                         home_formation, away_formation,
+                         updated_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                     """, (
-                        int(e["idEvent"]), league_name, round_num,
+                        match_id, league_name, round_num,
                         e.get("dateEvent", ""),
-                        e.get("strHomeTeam", ""),
-                        e.get("strAwayTeam", ""),
+                        home_team, away_team,
                         hs, aws, status,
+                        _int("intHomeShots"), _int("intAwayShots"),
+                        _int("intHomeYellowCards"), _int("intAwayYellowCards"),
+                        _int("intHomeRedCards"), _int("intAwayRedCards"),
+                        _str("strHomeFormation"), _str("strAwayFormation"),
                         datetime.now().isoformat(),
                     ))
+
+                    # Extraire les compositions (lineups)
+                    for side, team in [("Home", home_team), ("Away", away_team)]:
+                        for field, pos in [
+                            (f"str{side}LineupGoalkeeper", "GK"),
+                            (f"str{side}LineupDefense", "DEF"),
+                            (f"str{side}LineupMidfield", "MID"),
+                            (f"str{side}LineupForward", "FWD"),
+                        ]:
+                            for name in _parse_lineup_string(e.get(field)):
+                                c.execute(
+                                    "INSERT INTO lineups (match_id,team,player_name,position,is_starter) VALUES (?,?,?,?,1)",
+                                    (match_id, team, name, pos),
+                                )
+                        # Remplaçants
+                        for name in _parse_lineup_string(e.get(f"str{side}LineupSubstitutes")):
+                            c.execute(
+                                "INSERT INTO lineups (match_id,team,player_name,position,is_starter) VALUES (?,?,?,?,0)",
+                                (match_id, team, name, "SUB"),
+                            )
+
+                    if status == "FINISHED":
+                        finished_ids.append(match_id)
+
                     league_total += 1
 
                 time.sleep(1)
@@ -205,9 +300,119 @@ def _collect_from_thesportsdb():
         print(f"[API] {league_name} → {league_total} matchs")
         total += league_total
 
+    # Récupérer les statistiques détaillées pour les matchs récents
+    _collect_event_statistics(conn, finished_ids[-100:])  # 100 derniers matchs
+
+    # Détecter suspensions (cartons rouges / accumulation jaunes)
+    _detect_suspensions(conn)
+
     conn.commit()
     conn.close()
-    print(f"[API] Total : {total} matchs réels récupérés.")
+    print(f"[API] Total : {total} matchs réels récupérés (dont {len(finished_ids)} terminés).")
+
+
+def _collect_event_statistics(conn, match_ids):
+    """Récupère les stats détaillées (possession, corners, tirs cadrés, fautes) pour les matchs terminés."""
+    import requests as req
+    c = conn.cursor()
+    updated = 0
+
+    # Traiter les matchs les plus récents en priorité
+    for mid in reversed(match_ids[-60:]):
+        try:
+            r = req.get(
+                "https://www.thesportsdb.com/api/v1/json/3/lookupeventstatistics.php",
+                params={"id": mid}, timeout=10,
+            )
+            if r.status_code == 429:
+                time.sleep(5)
+                continue
+            if r.status_code != 200:
+                continue
+
+            raw = r.json().get("eventstats") or []
+            if not raw:
+                time.sleep(0.5)
+                continue
+
+            stat_map = {}
+            for s in raw:
+                stat_name = (s.get("strStat") or "").strip()
+                h_val = s.get("intHome")
+                a_val = s.get("intAway")
+                if stat_name:
+                    stat_map[stat_name] = (h_val, a_val)
+
+            updates = {}
+            # Mapping des noms de stats TheSportsDB
+            STAT_MAP = {
+                "Ball Possession":     ("home_possession", "away_possession"),
+                "Possession":          ("home_possession", "away_possession"),
+                "Shots on Goal":       ("home_shots_on_target", "away_shots_on_target"),
+                "Shots On Target":     ("home_shots_on_target", "away_shots_on_target"),
+                "Corner Kicks":        ("home_corners", "away_corners"),
+                "Corners":             ("home_corners", "away_corners"),
+                "Fouls":               ("home_fouls", "away_fouls"),
+                "Fouls Committed":     ("home_fouls", "away_fouls"),
+            }
+            for stat_name, (h_col, a_col) in STAT_MAP.items():
+                if stat_name in stat_map:
+                    hv, av = stat_map[stat_name]
+                    if hv is not None:
+                        try:
+                            updates[h_col] = float(str(hv).replace("%", ""))
+                        except (ValueError, TypeError):
+                            pass
+                    if av is not None:
+                        try:
+                            updates[a_col] = float(str(av).replace("%", ""))
+                        except (ValueError, TypeError):
+                            pass
+
+            if updates:
+                set_clause = ", ".join(f"{k}=?" for k in updates)
+                c.execute(f"UPDATE matches SET {set_clause} WHERE id=?",
+                          list(updates.values()) + [mid])
+                updated += 1
+
+            time.sleep(0.8)
+        except Exception as ex:
+            print(f"[STATS] Erreur match {mid}: {ex}")
+
+    print(f"[STATS] {updated} matchs enrichis avec stats détaillées.")
+
+
+def _detect_suspensions(conn):
+    """Détecte les joueurs suspendus (carton rouge ou accumulation de jaunes)."""
+    c = conn.cursor()
+
+    # Récupérer les cartons rouges des derniers matchs
+    c.execute("""
+        SELECT m.home_team, m.away_team, m.competition,
+               m.home_red_cards, m.away_red_cards, m.date,
+               m.id
+        FROM matches m
+        WHERE m.status = 'FINISHED'
+          AND (m.home_red_cards > 0 OR m.away_red_cards > 0)
+        ORDER BY m.date DESC
+        LIMIT 50
+    """)
+    red_card_matches = c.fetchall()
+
+    # Pour chaque match avec carton rouge, chercher les joueurs expulsés dans les lineups
+    for ht, at, comp, hrc, arc, date, mid in red_card_matches:
+        if hrc and hrc > 0:
+            # On ne connaît pas exactement qui a reçu le rouge,
+            # mais on flag l'équipe comme ayant un suspendu potentiel
+            c.execute("""
+                INSERT OR REPLACE INTO injuries (team, player_name, injury_type, detail, competition, updated_at)
+                VALUES (?, ?, 'suspension', ?, ?, ?)
+            """, (ht, f"Joueur suspendu ({hrc} rouge(s))", f"Carton rouge le {date}", comp, datetime.now().isoformat()))
+        if arc and arc > 0:
+            c.execute("""
+                INSERT OR REPLACE INTO injuries (team, player_name, injury_type, detail, competition, updated_at)
+                VALUES (?, ?, 'suspension', ?, ?, ?)
+            """, (at, f"Joueur suspendu ({arc} rouge(s))", f"Carton rouge le {date}", comp, datetime.now().isoformat()))
 
 
 def _collect_from_api():
@@ -433,14 +638,280 @@ def get_h2h(home, away, finished):
     }
 
 
-def compute_confidence(pp, elo_home, elo_away, fh, fa, h2h):
+def compute_confidence(pp, elo_home, elo_away, fh, fa, h2h, adv_h=None, adv_a=None):
     probs = [pp["home_win"], pp["draw"], pp["away_win"]]
     entropy = -sum(p * math.log(p + 1e-9) for p in probs) / math.log(3)
     certainty = (1 - entropy) * 50
     elo_ok = 20 if (elo_home > elo_away + 50) == (pp["home_win"] > pp["away_win"]) else 0
     form_bonus = min(15, abs(fh["form_score"] - fa["form_score"]) * 0.15)
     h2h_bonus = 10 if h2h["total_games"] >= 3 else 0
-    return round(min(95, max(30, certainty + elo_ok + form_bonus + h2h_bonus)), 1)
+
+    # Bonus données avancées
+    adv_bonus = 0
+    if adv_h and adv_a:
+        # Plus de données = plus de confiance
+        data_count = adv_h.get("data_completeness", 0) + adv_a.get("data_completeness", 0)
+        adv_bonus = min(10, data_count * 2)
+        # Si xG et pressing concordent avec le pronostic → bonus
+        if adv_h.get("xg_per90", 0) > 0 and adv_a.get("xg_per90", 0) > 0:
+            xg_fav = "home" if adv_h["xg_per90"] > adv_a["xg_per90"] else "away"
+            prob_fav = "home" if pp["home_win"] > pp["away_win"] else "away"
+            if xg_fav == prob_fav:
+                adv_bonus += 5
+
+    return round(min(95, max(30, certainty + elo_ok + form_bonus + h2h_bonus + adv_bonus)), 1)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  MOTEUR ANALYTIQUE AVANCÉ
+# ═══════════════════════════════════════════════════════════════
+
+def compute_advanced_metrics(team, finished):
+    """Calcule les métriques avancées : xG, pressing, efficacité tirs, solidité défensive."""
+    team_matches = sorted(
+        [m for m in finished if m["home_team"] == team or m["away_team"] == team],
+        key=lambda x: x["date"], reverse=True
+    )[:15]  # 15 derniers matchs
+
+    if not team_matches:
+        return {
+            "xg_per90": 0, "xga_per90": 0, "pressing_intensity": 50,
+            "shot_efficiency": 0, "defensive_solidity": 50,
+            "avg_possession": 50, "avg_shots": 0, "avg_sot": 0,
+            "avg_corners": 0, "avg_fouls": 0, "clean_sheets": 0,
+            "data_completeness": 0,
+        }
+
+    total_shots = 0
+    total_sot = 0
+    total_goals_for = 0
+    total_goals_against = 0
+    total_corners = 0
+    total_possession = 0
+    total_fouls = 0
+    clean_sheets = 0
+    has_shots = 0
+    has_poss = 0
+    has_corners = 0
+    n = len(team_matches)
+
+    for m in team_matches:
+        is_home = m["home_team"] == team
+        gf = (m["home_score"] if is_home else m["away_score"]) or 0
+        ga = (m["away_score"] if is_home else m["home_score"]) or 0
+        total_goals_for += gf
+        total_goals_against += ga
+        if ga == 0:
+            clean_sheets += 1
+
+        shots = (m["home_shots"] if is_home else m["away_shots"])
+        sot = (m["home_shots_on_target"] if is_home else m["away_shots_on_target"])
+        poss = (m["home_possession"] if is_home else m["away_possession"])
+        corners = (m["home_corners"] if is_home else m["away_corners"])
+        fouls = (m["home_fouls"] if is_home else m["away_fouls"])
+
+        if shots is not None:
+            total_shots += shots
+            has_shots += 1
+        if sot is not None:
+            total_sot += sot
+        if poss is not None:
+            total_possession += poss
+            has_poss += 1
+        if corners is not None:
+            total_corners += corners
+            has_corners += 1
+        if fouls is not None:
+            total_fouls += fouls
+
+    avg_shots = total_shots / has_shots if has_shots else 0
+    avg_sot = total_sot / has_shots if has_shots else 0
+    avg_poss = total_possession / has_poss if has_poss else 50
+    avg_corners = total_corners / has_corners if has_corners else 0
+    avg_fouls = total_fouls / n
+    avg_gf = total_goals_for / n
+    avg_ga = total_goals_against / n
+
+    # Modèle xG basé sur les tirs
+    # xG par tir ≈ 0.10, par tir cadré ≈ 0.32 (données moyennes top 5 ligues)
+    if has_shots and avg_shots > 0:
+        xg_per90 = avg_sot * 0.32 + (avg_shots - avg_sot) * 0.04
+    else:
+        xg_per90 = avg_gf  # Fallback sur les buts réels
+
+    # xGA (expected goals against) — estimation défensive
+    # On utilise les buts encaissés pondérés par la solidité défensive
+    xga_per90 = avg_ga
+
+    # Intensité de pressing (0-100)
+    # Haute possession + beaucoup de tirs + corners + fautes = pressing haut
+    pressing = min(100, max(0,
+        (avg_poss - 35) * 0.8 +
+        avg_shots * 1.5 +
+        avg_corners * 2.5 +
+        avg_fouls * 0.3
+    ))
+
+    # Efficacité des tirs (% de conversion)
+    shot_efficiency = (total_goals_for / total_shots * 100) if total_shots > 0 else 0
+
+    # Solidité défensive (0-100, inversement lié aux buts encaissés)
+    defensive_solidity = max(0, min(100, 100 - avg_ga * 30 + clean_sheets * 5))
+
+    # Complétude des données (0-5 = combien de métriques sont disponibles)
+    data_completeness = sum([has_shots > 0, has_poss > 0, has_corners > 0, n >= 5, n >= 10])
+
+    return {
+        "xg_per90":             round(xg_per90, 2),
+        "xga_per90":            round(xga_per90, 2),
+        "pressing_intensity":   round(pressing, 1),
+        "shot_efficiency":      round(shot_efficiency, 1),
+        "defensive_solidity":   round(defensive_solidity, 1),
+        "avg_possession":       round(avg_poss, 1),
+        "avg_shots":            round(avg_shots, 1),
+        "avg_sot":              round(avg_sot, 1),
+        "avg_corners":          round(avg_corners, 1),
+        "avg_fouls":            round(avg_fouls, 1),
+        "clean_sheets":         clean_sheets,
+        "data_completeness":    data_completeness,
+        "matches_analyzed":     n,
+    }
+
+
+def get_team_lineups(team, conn):
+    """Récupère la dernière composition connue d'une équipe."""
+    c = conn.cursor()
+    c.execute("""
+        SELECT l.match_id, l.player_name, l.position, l.is_starter, m.date
+        FROM lineups l
+        JOIN matches m ON l.match_id = m.id
+        WHERE l.team = ?
+        ORDER BY m.date DESC
+    """, (team,))
+    rows = c.fetchall()
+    if not rows:
+        return {"available": False, "starters": [], "subs": [], "formation": None, "date": None}
+
+    last_match_id = rows[0][0]
+    last_date = rows[0][4]
+    starters = []
+    subs = []
+    for mid, name, pos, is_starter, date in rows:
+        if mid != last_match_id:
+            break
+        if is_starter:
+            starters.append({"name": name, "position": pos})
+        else:
+            subs.append({"name": name, "position": pos})
+
+    # Récupérer la formation
+    c.execute("SELECT home_team, home_formation, away_formation FROM matches WHERE id=?", (last_match_id,))
+    mrow = c.fetchone()
+    formation = None
+    if mrow:
+        formation = mrow[1] if mrow[0] == team else mrow[2]
+
+    return {
+        "available": len(starters) > 0,
+        "starters": starters,
+        "subs": subs,
+        "formation": formation,
+        "date": last_date,
+        "match_id": last_match_id,
+    }
+
+
+def get_team_injuries(team, conn):
+    """Récupère les blessures/suspensions d'une équipe."""
+    c = conn.cursor()
+    c.execute("""
+        SELECT player_name, injury_type, detail, updated_at
+        FROM injuries
+        WHERE team = ?
+        ORDER BY updated_at DESC
+    """, (team,))
+    return [
+        {"player": r[0], "type": r[1], "detail": r[2], "updated_at": r[3]}
+        for r in c.fetchall()
+    ]
+
+
+def predict_match_advanced(home, away, attack, defense, avg, home_adv, adv_h, adv_a):
+    """Prédiction Poisson enrichie par les métriques avancées (xG, pressing, efficacité)."""
+    lh = avg * attack.get(home, 1.0) * defense.get(away, 1.0) * home_adv
+    la = avg * attack.get(away, 1.0) * defense.get(home, 1.0)
+
+    # Ajustement xG : pondérer avec le xG réel quand disponible
+    if adv_h["xg_per90"] > 0 and adv_h["data_completeness"] >= 2:
+        xg_weight = min(0.4, adv_h["data_completeness"] * 0.08)
+        lh = lh * (1 - xg_weight) + adv_h["xg_per90"] * xg_weight
+    if adv_a["xg_per90"] > 0 and adv_a["data_completeness"] >= 2:
+        xg_weight = min(0.4, adv_a["data_completeness"] * 0.08)
+        la = la * (1 - xg_weight) + adv_a["xg_per90"] * xg_weight
+
+    # Ajustement pressing : équipe avec pressing haut génère plus d'occasions
+    if adv_h["pressing_intensity"] > 0 and adv_a["pressing_intensity"] > 0:
+        press_diff = (adv_h["pressing_intensity"] - adv_a["pressing_intensity"]) / 200
+        lh *= (1 + press_diff * 0.15)
+        la *= (1 - press_diff * 0.10)
+
+    # Ajustement solidité défensive
+    if adv_a["defensive_solidity"] > 60:
+        lh *= 0.95  # Défense solide réduit les buts attendus
+    if adv_h["defensive_solidity"] > 60:
+        la *= 0.95
+
+    lh, la = max(0.1, lh), max(0.1, la)
+
+    mat = np.array([
+        [poisson.pmf(i, lh) * poisson.pmf(j, la) for j in range(9)]
+        for i in range(9)
+    ])
+    mat /= mat.sum()
+
+    bi, bj = np.unravel_index(np.argmax(mat), mat.shape)
+    p_home = round(float(np.sum(np.tril(mat, -1))), 4)
+    p_draw = round(float(np.trace(mat)), 4)
+    p_away = round(float(np.sum(np.triu(mat, 1))), 4)
+
+    over_15 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 2)), 4)
+    over_25 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 3)), 4)
+    over_35 = round(float(sum(mat[i][j] for i in range(9) for j in range(9) if i + j >= 4)), 4)
+    btts_yes = round(float(sum(mat[i][j] for i in range(1, 9) for j in range(1, 9))), 4)
+
+    flat = [(float(mat[i][j]), f"{i}-{j}") for i in range(9) for j in range(9)]
+    flat.sort(reverse=True)
+    top_scores = [{"score": s, "prob": round(p, 4)} for p, s in flat[:5]]
+
+    odds_1 = round(1 / max(0.01, p_home), 2)
+    odds_x = round(1 / max(0.01, p_draw), 2)
+    odds_2 = round(1 / max(0.01, p_away), 2)
+
+    dc_1x = round(p_home + p_draw, 4)
+    dc_x2 = round(p_draw + p_away, 4)
+    dc_12 = round(p_home + p_away, 4)
+
+    return {
+        "home_win":               p_home,
+        "draw":                   p_draw,
+        "away_win":               p_away,
+        "expected_home_goals":    round(lh, 2),
+        "expected_away_goals":    round(la, 2),
+        "most_likely_score":      f"{bi}-{bj}",
+        "most_likely_score_prob": round(float(mat[bi][bj]), 4),
+        "over_15":                over_15,
+        "over_25":                over_25,
+        "over_35":                over_35,
+        "btts_yes":               btts_yes,
+        "btts_no":                round(1 - btts_yes, 4),
+        "odds_1":                 odds_1,
+        "odds_x":                 odds_x,
+        "odds_2":                 odds_2,
+        "double_chance_1x":       dc_1x,
+        "double_chance_x2":       dc_x2,
+        "double_chance_12":       dc_12,
+        "top_scores":             top_scores,
+    }
 
 # ═══════════════════════════════════════════════════════════════
 #  PIPELINE COMPLET
@@ -473,14 +944,31 @@ def run_pipeline(force=False):
 
         attack, defense, avg, home_adv = build_poisson(finished)
 
-        # Générer les prédictions
+        # Calculer les métriques avancées pour toutes les équipes
+        print("[PIPELINE] Calcul des métriques avancées (xG, pressing, efficacité)...")
+        teams_adv = {}
+        all_teams = set(m["home_team"] for m in all_m) | set(m["away_team"] for m in all_m)
+        for t in all_teams:
+            teams_adv[t] = compute_advanced_metrics(t, finished)
+
+        # Générer les prédictions avec le modèle avancé
         for m in scheduled:
             home, away = m["home_team"], m["away_team"]
-            pp = predict_match(home, away, attack, defense, avg, home_adv)
+            adv_h = teams_adv.get(home, compute_advanced_metrics(home, finished))
+            adv_a = teams_adv.get(away, compute_advanced_metrics(away, finished))
+
+            pp = predict_match_advanced(home, away, attack, defense, avg, home_adv, adv_h, adv_a)
             fh = get_form(home, finished)
             fa = get_form(away, finished)
             h2h = get_h2h(home, away, finished)
-            conf = compute_confidence(pp, elo.get(home), elo.get(away), fh, fa, h2h)
+
+            # Compositions et blessures
+            lineup_h = get_team_lineups(home, conn)
+            lineup_a = get_team_lineups(away, conn)
+            injuries_h = get_team_injuries(home, conn)
+            injuries_a = get_team_injuries(away, conn)
+
+            conf = compute_confidence(pp, elo.get(home), elo.get(away), fh, fa, h2h, adv_h, adv_a)
 
             probs = {"home": pp["home_win"], "draw": pp["draw"], "away": pp["away_win"]}
             favorite = max(probs, key=probs.get)
@@ -515,6 +1003,12 @@ def run_pipeline(force=False):
                 "form_home":  fh,
                 "form_away":  fa,
                 "h2h":        h2h,
+                "advanced_home": adv_h,
+                "advanced_away": adv_a,
+                "lineup_home":   lineup_h,
+                "lineup_away":   lineup_a,
+                "injuries_home": injuries_h,
+                "injuries_away": injuries_a,
                 "confidence": conf,
                 "favorite":   favorite,
                 "betting_tips": tips,
@@ -640,8 +1134,15 @@ def api_data():
             "home_score": m["home_score"], "away_score": m["away_score"],
             "result": res,
             "home_xg": m["home_xg"], "away_xg": m["away_xg"],
-            "home_possession": m["home_possession"], "away_possession": m["away_possession"],
-            "home_shots": m["home_shots"], "away_shots": m["away_shots"],
+            "home_possession": m.get("home_possession"), "away_possession": m.get("away_possession"),
+            "home_shots": m.get("home_shots"), "away_shots": m.get("away_shots"),
+            "home_shots_on_target": m.get("home_shots_on_target"),
+            "away_shots_on_target": m.get("away_shots_on_target"),
+            "home_corners": m.get("home_corners"), "away_corners": m.get("away_corners"),
+            "home_fouls": m.get("home_fouls"), "away_fouls": m.get("away_fouls"),
+            "home_yellow_cards": m.get("home_yellow_cards"), "away_yellow_cards": m.get("away_yellow_cards"),
+            "home_red_cards": m.get("home_red_cards"), "away_red_cards": m.get("away_red_cards"),
+            "home_formation": m.get("home_formation"), "away_formation": m.get("away_formation"),
         })
 
     n = len(all_finished)

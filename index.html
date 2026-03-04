@@ -381,6 +381,127 @@
   }
   .tip-prob { font-family:'JetBrains Mono',monospace; font-size:.65rem; color:var(--muted); }
 
+  /* ── ADVANCED STATS ── */
+  .adv-row {
+    display:flex; gap:.35rem; margin-top:.5rem; flex-wrap:wrap;
+  }
+  .adv-pill {
+    font-family:'JetBrains Mono',monospace; font-size:.58rem;
+    padding:.15rem .45rem; border-radius:5px; white-space:nowrap;
+    display:flex; align-items:center; gap:.25rem;
+  }
+  .adv-pill.xg { background:rgba(255,165,0,.12); color:#ffa500; border:1px solid rgba(255,165,0,.2); }
+  .adv-pill.press { background:rgba(255,75,110,.10); color:var(--accent2); border:1px solid rgba(255,75,110,.2); }
+  .adv-pill.def { background:rgba(75,143,255,.10); color:var(--accent3); border:1px solid rgba(75,143,255,.2); }
+  .adv-pill.inj { background:rgba(255,75,110,.15); color:#ff6b6b; border:1px solid rgba(255,75,110,.3); }
+
+  /* ── LINEUPS ── */
+  .lineup-section {
+    margin-top:.75rem; padding:.6rem; background:var(--bg2);
+    border-radius:8px; border:1px solid var(--border);
+  }
+  .lineup-header {
+    font-size:.65rem; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); margin-bottom:.4rem; display:flex;
+    align-items:center; justify-content:space-between;
+  }
+  .lineup-formation {
+    font-family:'JetBrains Mono',monospace; font-size:.7rem;
+    color:var(--accent); font-weight:600;
+  }
+  .lineup-grid {
+    display:grid; grid-template-columns:1fr 1fr; gap:.75rem;
+  }
+  .lineup-team { font-size:.7rem; }
+  .lineup-team-title {
+    font-weight:600; font-size:.72rem; margin-bottom:.35rem;
+    display:flex; align-items:center; gap:.35rem;
+  }
+  .lineup-player {
+    display:flex; align-items:center; gap:.3rem;
+    padding:.15rem 0; font-size:.68rem; color:var(--text);
+  }
+  .lineup-pos {
+    font-family:'JetBrains Mono',monospace; font-size:.55rem;
+    font-weight:600; min-width:28px; text-align:center;
+    padding:.1rem .2rem; border-radius:3px;
+  }
+  .lineup-pos.GK  { background:rgba(245,197,66,.2); color:var(--draw); }
+  .lineup-pos.DEF { background:rgba(75,143,255,.2); color:var(--accent3); }
+  .lineup-pos.MID { background:rgba(0,229,160,.2); color:var(--accent); }
+  .lineup-pos.FWD { background:rgba(255,75,110,.2); color:var(--accent2); }
+  .lineup-pos.SUB { background:rgba(255,255,255,.05); color:var(--muted); }
+  .lineup-subs { margin-top:.3rem; padding-top:.3rem; border-top:1px solid var(--border); }
+  .lineup-subs .lineup-player { color:var(--muted); font-size:.62rem; }
+  .lineup-unavailable {
+    text-align:center; padding:.75rem; color:var(--muted);
+    font-size:.72rem; font-style:italic;
+  }
+
+  /* ── INJURY BADGES ── */
+  .injury-list { margin-top:.4rem; }
+  .injury-item {
+    display:flex; align-items:center; gap:.3rem;
+    font-size:.65rem; color:#ff6b6b; padding:.1rem 0;
+  }
+  .injury-icon { font-size:.7rem; }
+  .injury-type-badge {
+    font-family:'JetBrains Mono',monospace; font-size:.55rem;
+    padding:.1rem .3rem; border-radius:3px;
+    background:rgba(255,75,110,.12); color:#ff6b6b;
+  }
+
+  /* ── ADVANCED STATS PANEL (modal) ── */
+  .adv-panel {
+    display:grid; grid-template-columns:1fr 1fr; gap:.5rem;
+    margin:1rem 0; padding:.75rem;
+    background:var(--bg3); border-radius:10px; border:1px solid var(--border);
+  }
+  .adv-stat-card {
+    text-align:center; padding:.5rem;
+  }
+  .adv-stat-label {
+    font-size:.6rem; text-transform:uppercase; letter-spacing:.08em;
+    color:var(--muted); margin-bottom:.2rem;
+  }
+  .adv-stat-value {
+    font-family:'Bebas Neue',sans-serif; font-size:1.3rem;
+  }
+  .adv-stat-bar {
+    height:4px; background:var(--bg2); border-radius:2px;
+    margin-top:.3rem; overflow:hidden;
+  }
+  .adv-stat-fill { height:100%; border-radius:2px; }
+
+  /* ── PRESSING GAUGE ── */
+  .pressing-gauge {
+    display:flex; align-items:center; gap:.5rem;
+    margin:.5rem 0;
+  }
+  .pressing-bar {
+    flex:1; height:8px; background:var(--bg2); border-radius:4px;
+    overflow:hidden; position:relative;
+  }
+  .pressing-fill {
+    height:100%; border-radius:4px;
+    background:linear-gradient(90deg, #4b8fff, #ff4b6e);
+    transition:width .3s;
+  }
+  .pressing-label {
+    font-family:'JetBrains Mono',monospace; font-size:.7rem;
+    min-width:35px; text-align:right;
+  }
+
+  /* ── DATA QUALITY INDICATOR ── */
+  .data-quality {
+    display:flex; gap:2px; align-items:center;
+  }
+  .data-dot {
+    width:5px; height:5px; border-radius:50%;
+    background:var(--bg3);
+  }
+  .data-dot.filled { background:var(--accent); }
+
   @media(max-width:1100px){ .two-col{grid-template-columns:1fr} .kpi-bar{grid-template-columns:repeat(2,1fr)} }
   @media(max-width:640px){
     main{padding:1rem} .kpi-bar{grid-template-columns:repeat(2,1fr)}
@@ -388,6 +509,8 @@
     nav button{font-size:.75rem;padding:.4rem .7rem}
     .result-badge{display:none}
     .bet-panel{grid-template-columns:1fr}
+    .lineup-grid{grid-template-columns:1fr}
+    .adv-panel{grid-template-columns:1fr}
   }
 </style>
 </head>
@@ -427,7 +550,7 @@
     <div class="panel">
       <div class="panel-header">
         <div class="panel-title">⚡ Prédictions IA à venir</div>
-        <span class="badge">Poisson + ELO</span>
+        <span class="badge">Poisson + ELO + xG + Pressing</span>
       </div>
       <div class="filter-bar" id="pred-comp-bar">
         <button class="filter-btn active" onclick="filterComp('all',this)">Tous</button>
@@ -668,9 +791,28 @@ function renderPredictions() {
     const btts = p.btts_yes != null ? Math.round(p.btts_yes*100) : null;
     const tips = p.betting_tips || [];
     const bestTip = tips[0];
+    const ah = p.advanced_home || {};
+    const aa = p.advanced_away || {};
+    const ih = p.injuries_home || [];
+    const ia = p.injuries_away || [];
+    const lh = p.lineup_home || {};
+    const la = p.lineup_away || {};
+    const hasAdv = ah.data_completeness > 0 || aa.data_completeness > 0;
+    const hasLineup = lh.available || la.available;
+    const hasInjuries = ih.length > 0 || ia.length > 0;
+
+    // Data quality dots (0-5)
+    const dq = Math.max(ah.data_completeness||0, aa.data_completeness||0);
+    const dqHtml = `<div class="data-quality" title="Qualité données: ${dq}/5">${
+      [0,1,2,3,4].map(i => `<div class="data-dot ${i<dq?'filled':''}"></div>`).join('')
+    }</div>`;
+
     return `
     <div class="pred-card fade-in" onclick="openPredModal(${p.match_id})">
-      <div class="pred-date">${p.competition} · J${p.matchday} · ${fmt(p.date)}</div>
+      <div class="pred-date" style="display:flex;justify-content:space-between;align-items:center">
+        <span>${p.competition} · J${p.matchday} · ${fmt(p.date)}</span>
+        ${dqHtml}
+      </div>
       <div class="pred-teams">
         <div class="pred-team">${p.home_team}</div>
         <div class="pred-score">${p.most_likely_score}</div>
@@ -686,6 +828,15 @@ function renderPredictions() {
         <span class="prob-label-x">X · ${dw}%</span>
         <span class="prob-label-2">${aw}% · 2</span>
       </div>
+      ${hasAdv ? `
+      <div class="adv-row">
+        ${ah.xg_per90>0 ? `<span class="adv-pill xg">xG ${ah.xg_per90} vs ${aa.xg_per90||'?'}</span>` : ''}
+        ${ah.pressing_intensity>0 ? `<span class="adv-pill press">Press. ${Math.round(ah.pressing_intensity)} vs ${Math.round(aa.pressing_intensity||0)}</span>` : ''}
+        ${ah.defensive_solidity>0 ? `<span class="adv-pill def">Def. ${Math.round(ah.defensive_solidity)} vs ${Math.round(aa.defensive_solidity||0)}</span>` : ''}
+      </div>` : ''}
+      ${hasInjuries ? `<div class="adv-row">${
+        ih.length > 0 ? `<span class="adv-pill inj">${ih.length} absent(s) ${p.home_team.split(' ').pop()}</span>` : ''
+      }${ia.length > 0 ? `<span class="adv-pill inj">${ia.length} absent(s) ${p.away_team.split(' ').pop()}</span>` : ''}</div>` : ''}
       <div class="bet-odds-row">
         <span class="bet-odd">1 <strong>@${p.odds_1||'—'}</strong></span>
         <span class="bet-odd">X <strong>@${p.odds_x||'—'}</strong></span>
@@ -694,6 +845,7 @@ function renderPredictions() {
       <div class="bet-tags">
         ${o25 !== null ? `<span class="bet-tag ${o25>50?'over':'under'}">O/U 2.5 : ${o25>50?'Over':'Under'} ${o25>50?o25:100-o25}%</span>` : ''}
         ${btts !== null ? `<span class="bet-tag btts">BTTS : ${btts>50?'Oui':'Non'} ${btts>50?btts:100-btts}%</span>` : ''}
+        ${hasLineup ? `<span class="bet-tag btts" style="background:rgba(75,143,255,.1);color:var(--accent3);border-color:rgba(75,143,255,.2)">Compo dispo</span>` : ''}
       </div>
       ${bestTip ? `
       <div class="bet-tip">
@@ -849,6 +1001,73 @@ function renderElo() {
 }
 
 // ── MODALS ─────────────────────────────────────────────────────
+function renderLineupTeam(lineup, teamName) {
+  if (!lineup || !lineup.available || !lineup.starters || lineup.starters.length === 0) {
+    return `<div class="lineup-team"><div class="lineup-team-title">${teamName}</div><div class="lineup-unavailable">Composition non annoncee</div></div>`;
+  }
+  const starters = lineup.starters || [];
+  const subs = lineup.subs || [];
+  const posOrder = {GK:0,DEF:1,MID:2,FWD:3};
+  starters.sort((a,b) => (posOrder[a.position]||9) - (posOrder[b.position]||9));
+  return `<div class="lineup-team">
+    <div class="lineup-team-title">${teamName} ${lineup.formation ? `<span class="lineup-formation">${lineup.formation}</span>` : ''}</div>
+    ${starters.map(p => `<div class="lineup-player"><span class="lineup-pos ${p.position}">${p.position}</span>${p.name}</div>`).join('')}
+    ${subs.length > 0 ? `<div class="lineup-subs">${subs.slice(0,7).map(p => `<div class="lineup-player"><span class="lineup-pos SUB">SUB</span>${p.name}</div>`).join('')}</div>` : ''}
+  </div>`;
+}
+
+function renderAdvancedPanel(ah, aa, homeName, awayName) {
+  if ((!ah || ah.data_completeness === 0) && (!aa || aa.data_completeness === 0)) return '';
+  const xgH = ah?.xg_per90 || 0, xgA = aa?.xg_per90 || 0;
+  const pressH = ah?.pressing_intensity || 0, pressA = aa?.pressing_intensity || 0;
+  const defH = ah?.defensive_solidity || 0, defA = aa?.defensive_solidity || 0;
+  const effH = ah?.shot_efficiency || 0, effA = aa?.shot_efficiency || 0;
+  const possH = ah?.avg_possession || 50, possA = aa?.avg_possession || 50;
+  const shotsH = ah?.avg_shots || 0, shotsA = aa?.avg_shots || 0;
+  const sotH = ah?.avg_sot || 0, sotA = aa?.avg_sot || 0;
+  return `
+    <div style="margin-top:1.25rem">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.5rem">
+        Donnees avancees (${Math.max(ah?.matches_analyzed||0, aa?.matches_analyzed||0)} matchs analyses)
+      </div>
+      <div class="stat-grid">
+        <div class="stat-val home">${xgH.toFixed(2)}</div><div class="stat-name">xG / match</div><div class="stat-val away">${xgA.toFixed(2)}</div>
+        <div class="stat-val home">${ah?.xga_per90?.toFixed(2)||'—'}</div><div class="stat-name">xGA / match</div><div class="stat-val away">${aa?.xga_per90?.toFixed(2)||'—'}</div>
+        <div class="stat-val home">${possH}%</div><div class="stat-name">Possession moy.</div><div class="stat-val away">${possA}%</div>
+        <div class="stat-val home">${shotsH}</div><div class="stat-name">Tirs / match</div><div class="stat-val away">${shotsA}</div>
+        <div class="stat-val home">${sotH}</div><div class="stat-name">Tirs cadres</div><div class="stat-val away">${sotA}</div>
+        <div class="stat-val home">${effH.toFixed(1)}%</div><div class="stat-name">Efficacite tirs</div><div class="stat-val away">${effA.toFixed(1)}%</div>
+        <div class="stat-val home">${Math.round(defH)}</div><div class="stat-name">Solidite def.</div><div class="stat-val away">${Math.round(defA)}</div>
+        <div class="stat-val home">${ah?.clean_sheets||0}</div><div class="stat-name">Clean sheets</div><div class="stat-val away">${aa?.clean_sheets||0}</div>
+      </div>
+      <div style="margin-top:.75rem">
+        <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.35rem">Intensite pressing</div>
+        <div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.3rem">
+          <span style="font-size:.7rem;min-width:60px">${homeName.split(' ').pop()}</span>
+          <div class="pressing-bar"><div class="pressing-fill" style="width:${pressH}%"></div></div>
+          <span class="pressing-label" style="color:var(--accent2)">${Math.round(pressH)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:.5rem">
+          <span style="font-size:.7rem;min-width:60px">${awayName.split(' ').pop()}</span>
+          <div class="pressing-bar"><div class="pressing-fill" style="width:${pressA}%"></div></div>
+          <span class="pressing-label" style="color:var(--accent2)">${Math.round(pressA)}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderInjuries(injuries, teamName) {
+  if (!injuries || injuries.length === 0) return '';
+  return `<div class="injury-list">
+    <div style="font-size:.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.2rem">${teamName}</div>
+    ${injuries.map(i => `<div class="injury-item">
+      <span class="injury-icon">${i.type === 'suspension' ? '🟥' : '🏥'}</span>
+      <span>${i.player}</span>
+      <span class="injury-type-badge">${i.type}</span>
+    </div>`).join('')}
+  </div>`;
+}
+
 function openPredModal(matchId) {
   const p = DATA.predictions.find(x => x.match_id === matchId);
   if (!p) return;
@@ -862,6 +1081,12 @@ function openPredModal(matchId) {
   const tips = p.betting_tips || [];
   const topScores = p.top_scores || [];
   const maxScoreProb = topScores[0]?.prob || 1;
+  const ah = p.advanced_home || {};
+  const aa = p.advanced_away || {};
+  const lh = p.lineup_home || {};
+  const la = p.lineup_away || {};
+  const ih = p.injuries_home || [];
+  const ia = p.injuries_away || [];
 
   const h2hItems = (p.h2h?.last_meetings||[]).map(m =>
     `<div class="h2h-item">
@@ -893,6 +1118,28 @@ function openPredModal(matchId) {
             <span class="top-score-val">${Math.round(s.prob*100)}%</span>
           </div>`).join('')}
       </div>
+    </div>` : '';
+
+  // Lineups section
+  const hasLineup = (lh.available && lh.starters?.length > 0) || (la.available && la.starters?.length > 0);
+  const lineupHtml = `
+    <div class="lineup-section">
+      <div class="lineup-header">
+        <span>Compositions ${hasLineup ? '' : '(dernieres connues)'}</span>
+        ${lh.formation || la.formation ? '' : ''}
+      </div>
+      <div class="lineup-grid">
+        ${renderLineupTeam(lh, p.home_team)}
+        ${renderLineupTeam(la, p.away_team)}
+      </div>
+    </div>`;
+
+  // Injuries section
+  const injuriesHtml = (ih.length > 0 || ia.length > 0) ? `
+    <div style="margin-top:.75rem">
+      <div style="font-size:.72rem;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:.4rem">Absences / Suspensions</div>
+      ${renderInjuries(ih, p.home_team)}
+      ${renderInjuries(ia, p.away_team)}
     </div>` : '';
 
   document.getElementById('modal-content').innerHTML = `
@@ -930,7 +1177,11 @@ function openPredModal(matchId) {
       <div class="prob-away" style="width:${aw}%"></div>
     </div>
 
-    <div class="bet-panel">
+    ${lineupHtml}
+    ${injuriesHtml}
+    ${renderAdvancedPanel(ah, aa, p.home_team, p.away_team)}
+
+    <div class="bet-panel" style="margin-top:1rem">
       ${o15 !== null ? `<div class="bet-market"><div class="bet-market-label">Over 1.5 buts</div><div class="bet-market-value" style="color:${o15>50?'var(--accent)':'var(--accent2)'}">${o15}%</div><div class="bet-market-sub">@${(1/Math.max(0.01,p.over_15)).toFixed(2)}</div></div>` : ''}
       ${o25 !== null ? `<div class="bet-market"><div class="bet-market-label">Over 2.5 buts</div><div class="bet-market-value" style="color:${o25>50?'var(--accent)':'var(--accent2)'}">${o25}%</div><div class="bet-market-sub">@${(1/Math.max(0.01,p.over_25)).toFixed(2)}</div></div>` : ''}
       ${o35 !== null ? `<div class="bet-market"><div class="bet-market-label">Over 3.5 buts</div><div class="bet-market-value" style="color:${o35>50?'var(--accent)':'var(--accent2)'}">${o35}%</div><div class="bet-market-sub">@${(1/Math.max(0.01,p.over_35)).toFixed(2)}</div></div>` : ''}
@@ -969,13 +1220,15 @@ function openResultModal(matchId) {
   const m = DATA.recent_results.find(r => r.id === matchId);
   if (!m) return;
   const hw = m.result==='H', aw = m.result==='A';
+  const hasStats = m.home_shots || m.home_possession || m.home_xg;
   document.getElementById('modal-content').innerHTML = `
     <div class="modal-header">
-      <div class="modal-title">Résultat du match</div>
+      <div class="modal-title">Resultat du match</div>
       <button class="modal-close" onclick="document.getElementById('modal').classList.remove('open')">×</button>
     </div>
     <div style="font-family:'JetBrains Mono',monospace;font-size:.7rem;color:var(--muted);text-align:center">
       J${m.matchday} · ${fmt(m.date)} · ${m.competition}
+      ${m.home_formation || m.away_formation ? `<br>${m.home_formation||'?'} vs ${m.away_formation||'?'}` : ''}
     </div>
     <div class="modal-scoreline">
       <div class="modal-team">
@@ -988,12 +1241,17 @@ function openResultModal(matchId) {
         <div class="modal-team-name">${m.away_team}</div>
       </div>
     </div>
-    ${m.home_xg ? `
+    ${hasStats ? `
     <div class="stat-grid">
-      <div class="stat-val home">${m.home_xg}</div><div class="stat-name">xG</div><div class="stat-val away">${m.away_xg}</div>
-      ${m.home_possession ? `<div class="stat-val home">${m.home_possession}%</div><div class="stat-name">Possession</div><div class="stat-val away">${m.away_possession}%</div>` : ''}
-      ${m.home_shots ? `<div class="stat-val home">${m.home_shots}</div><div class="stat-name">Tirs</div><div class="stat-val away">${m.away_shots}</div>` : ''}
-    </div>` : '<div style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:1rem">Stats détaillées non disponibles</div>'}`;
+      ${m.home_xg != null ? `<div class="stat-val home">${m.home_xg}</div><div class="stat-name">xG</div><div class="stat-val away">${m.away_xg}</div>` : ''}
+      ${m.home_possession != null ? `<div class="stat-val home">${m.home_possession}%</div><div class="stat-name">Possession</div><div class="stat-val away">${m.away_possession}%</div>` : ''}
+      ${m.home_shots != null ? `<div class="stat-val home">${m.home_shots}</div><div class="stat-name">Tirs</div><div class="stat-val away">${m.away_shots}</div>` : ''}
+      ${m.home_shots_on_target != null ? `<div class="stat-val home">${m.home_shots_on_target}</div><div class="stat-name">Tirs cadres</div><div class="stat-val away">${m.away_shots_on_target}</div>` : ''}
+      ${m.home_corners != null ? `<div class="stat-val home">${m.home_corners}</div><div class="stat-name">Corners</div><div class="stat-val away">${m.away_corners}</div>` : ''}
+      ${m.home_fouls != null ? `<div class="stat-val home">${m.home_fouls}</div><div class="stat-name">Fautes</div><div class="stat-val away">${m.away_fouls}</div>` : ''}
+      ${m.home_yellow_cards != null ? `<div class="stat-val home" style="color:var(--draw)">${m.home_yellow_cards}</div><div class="stat-name">Cartons jaunes</div><div class="stat-val away" style="color:var(--draw)">${m.away_yellow_cards}</div>` : ''}
+      ${m.home_red_cards != null && (m.home_red_cards > 0 || m.away_red_cards > 0) ? `<div class="stat-val home" style="color:#ff4b6e">${m.home_red_cards}</div><div class="stat-name">Cartons rouges</div><div class="stat-val away" style="color:#ff4b6e">${m.away_red_cards}</div>` : ''}
+    </div>` : '<div style="text-align:center;color:var(--muted);font-size:.8rem;margin-top:1rem">Stats detaillees non disponibles</div>'}`;
   document.getElementById('modal').classList.add('open');
 }
 
