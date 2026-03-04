@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 # ══ CONFIG ══════════════════════════════════════════
-BOT_TOKEN = "MTQ3ODc0MTk0MzgyNjc4MDM4MQ.GCiSA2.yrt4iLzBU3T-WfnqHIP-uydOKZ87lzyQBNZ4T4"
+BOT_TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = 123456789  # L'ID du salon Discord (voir étape 5)
 API_URL = "http://localhost:5000/data"  # Ton serveur Football.AI
 # ════════════════════════════════════════════════════
