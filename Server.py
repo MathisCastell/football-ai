@@ -576,7 +576,7 @@ def api_data():
     conn.row_factory = sqlite3.Row
     c = conn.cursor()
 
-    c.execute("SELECT * FROM matches WHERE status='FINISHED' AND home_score IS NOT NULL ORDER BY date DESC LIMIT 200")
+    c.execute("SELECT * FROM matches WHERE status='FINISHED' AND home_score IS NOT NULL ORDER BY date DESC")
     finished_raw = [dict(r) for r in c.fetchall()]
 
     c.execute("SELECT * FROM matches WHERE status='FINISHED' AND home_score IS NOT NULL")
@@ -585,7 +585,7 @@ def api_data():
     c.execute("""
         SELECT p.prediction_json FROM predictions p
         JOIN matches m ON p.match_id = m.id
-        ORDER BY m.date ASC LIMIT 100
+        ORDER BY m.date ASC
     """)
     preds_out = [json.loads(r["prediction_json"]) for r in c.fetchall()]
 
@@ -594,7 +594,12 @@ def api_data():
 
     conn.close()
 
-    # Classement
+    # Classement par compétition
+    team_comp = {}
+    for m in all_finished:
+        team_comp[m["home_team"]] = m["competition"]
+        team_comp[m["away_team"]] = m["competition"]
+
     table = defaultdict(lambda: {"played": 0, "wins": 0, "draws": 0, "losses": 0,
                                   "goals_for": 0, "goals_against": 0, "points": 0})
     for m in all_finished:
@@ -611,11 +616,19 @@ def api_data():
             table[at]["draws"] += 1; table[at]["points"] += 1
 
     standings = sorted(
-        [{"team": t, "goal_diff": s["goals_for"] - s["goals_against"], **s} for t, s in table.items()],
-        key=lambda x: (-x["points"], -x["goal_diff"], -x["goals_for"])
+        [{"team": t, "competition": team_comp.get(t, ""), "goal_diff": s["goals_for"] - s["goals_against"], **s} for t, s in table.items()],
+        key=lambda x: (x["competition"], -x["points"], -x["goal_diff"], -x["goals_for"])
     )
-    for i, t in enumerate(standings, 1):
-        t["rank"] = i
+    # Rang par compétition
+    current_comp = None
+    rank = 0
+    for t in standings:
+        if t["competition"] != current_comp:
+            current_comp = t["competition"]
+            rank = 1
+        else:
+            rank += 1
+        t["rank"] = rank
 
     finished_out = []
     for m in finished_raw:

@@ -429,6 +429,14 @@
         <div class="panel-title">⚡ Prédictions IA à venir</div>
         <span class="badge">Poisson + ELO</span>
       </div>
+      <div class="filter-bar" id="pred-comp-bar">
+        <button class="filter-btn active" onclick="filterComp('all',this)">Tous</button>
+        <button class="filter-btn" onclick="filterComp('Premier League',this)">Premier League</button>
+        <button class="filter-btn" onclick="filterComp('Ligue 1',this)">Ligue 1</button>
+        <button class="filter-btn" onclick="filterComp('La Liga',this)">La Liga</button>
+        <button class="filter-btn" onclick="filterComp('Serie A',this)">Serie A</button>
+        <button class="filter-btn" onclick="filterComp('Bundesliga',this)">Bundesliga</button>
+      </div>
       <div class="filter-bar" id="pred-filter-bar">
         <button class="filter-btn active" onclick="filterPreds('all',this)">Tous</button>
         <button class="filter-btn" onclick="filterPreds('high',this)">Haute confiance</button>
@@ -451,6 +459,14 @@
         <div class="panel-header">
           <div class="panel-title">📋 Derniers résultats</div>
           <span class="badge" id="results-count">—</span>
+        </div>
+        <div class="filter-bar" id="res-comp-bar">
+          <button class="filter-btn active" onclick="filterResComp('all',this)">Tous</button>
+          <button class="filter-btn" onclick="filterResComp('Premier League',this)">Premier League</button>
+          <button class="filter-btn" onclick="filterResComp('Ligue 1',this)">Ligue 1</button>
+          <button class="filter-btn" onclick="filterResComp('La Liga',this)">La Liga</button>
+          <button class="filter-btn" onclick="filterResComp('Serie A',this)">Serie A</button>
+          <button class="filter-btn" onclick="filterResComp('Bundesliga',this)">Bundesliga</button>
         </div>
         <div class="filter-bar" id="res-filter-bar">
           <button class="filter-btn active" onclick="filterResults('all',this)">Tous</button>
@@ -479,8 +495,15 @@
   <div class="section" id="sec-standings">
     <div class="panel">
       <div class="panel-header">
-        <div class="panel-title">🏆 Classement Premier League 2024/25</div>
-        <span class="badge">J38</span>
+        <div class="panel-title">🏆 Classement</div>
+        <span class="badge" id="standings-badge"></span>
+      </div>
+      <div class="filter-bar" id="standings-comp-bar">
+        <button class="filter-btn active" onclick="filterStandingsComp('Premier League',this)">Premier League</button>
+        <button class="filter-btn" onclick="filterStandingsComp('Ligue 1',this)">Ligue 1</button>
+        <button class="filter-btn" onclick="filterStandingsComp('La Liga',this)">La Liga</button>
+        <button class="filter-btn" onclick="filterStandingsComp('Serie A',this)">Serie A</button>
+        <button class="filter-btn" onclick="filterStandingsComp('Bundesliga',this)">Bundesliga</button>
       </div>
       <div style="overflow-x:auto;">
         <table class="standings-table">
@@ -523,7 +546,9 @@
 const API = "http://localhost:5000/api";
 let DATA = null;
 let predFilter = 'all';
+let compFilter = 'all';
 let resFilter  = 'all';
+let resCompFilter = 'all';
 let pollTimer  = null;
 
 // ── LOAD & POLL ────────────────────────────────────────────────
@@ -607,6 +632,13 @@ function animateNumber(id, target) {
 }
 
 // ── PREDICTIONS ────────────────────────────────────────────────
+function filterComp(f, btn) {
+  document.querySelectorAll('#pred-comp-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  compFilter = f;
+  renderPredictions();
+}
+
 function filterPreds(f, btn) {
   document.querySelectorAll('#pred-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -617,6 +649,7 @@ function filterPreds(f, btn) {
 function renderPredictions() {
   if (!DATA) return;
   let preds = [...DATA.predictions];
+  if (compFilter !== 'all') preds = preds.filter(p => p.competition === compFilter);
   if (predFilter === 'high') preds = preds.filter(p => p.confidence >= 55);
   else if (predFilter === 'home') preds = preds.filter(p => p.favorite === 'home');
   else if (predFilter === 'draw') preds = preds.filter(p => p.favorite === 'draw');
@@ -629,7 +662,7 @@ function renderPredictions() {
     c.innerHTML = `<div class="loading" style="grid-column:1/-1;color:var(--muted)">Aucune prédiction pour ce filtre</div>`;
     return;
   }
-  c.innerHTML = preds.slice(0,40).map(p => {
+  c.innerHTML = preds.map(p => {
     const hw = Math.round(p.home_win*100), dw = Math.round(p.draw*100), aw = Math.round(p.away_win*100);
     const o25 = p.over_25 != null ? Math.round(p.over_25*100) : null;
     const btts = p.btts_yes != null ? Math.round(p.btts_yes*100) : null;
@@ -637,7 +670,7 @@ function renderPredictions() {
     const bestTip = tips[0];
     return `
     <div class="pred-card fade-in" onclick="openPredModal(${p.match_id})">
-      <div class="pred-date">J${p.matchday} · ${fmt(p.date)}</div>
+      <div class="pred-date">${p.competition} · J${p.matchday} · ${fmt(p.date)}</div>
       <div class="pred-teams">
         <div class="pred-team">${p.home_team}</div>
         <div class="pred-score">${p.most_likely_score}</div>
@@ -678,6 +711,13 @@ function renderPredictions() {
 }
 
 // ── RESULTS ────────────────────────────────────────────────────
+function filterResComp(f, btn) {
+  document.querySelectorAll('#res-comp-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  resCompFilter = f;
+  renderResultsList();
+}
+
 function filterResults(f, btn) {
   document.querySelectorAll('#res-filter-bar .filter-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -688,13 +728,14 @@ function filterResults(f, btn) {
 function renderResultsList() {
   if (!DATA) return;
   let matches = DATA.recent_results;
+  if (resCompFilter !== 'all') matches = matches.filter(m => m.competition === resCompFilter);
   if (resFilter !== 'all') matches = matches.filter(m => m.result === resFilter);
   document.getElementById('results-count').textContent = matches.length + ' matchs';
   document.getElementById('results-list').innerHTML = matches.map(m => {
     const hw = m.result === 'H', aw = m.result === 'A';
     return `
     <div class="match-item" onclick="openResultModal(${m.id})">
-      <div class="match-date">${fmt(m.date)}<br><span style="opacity:.6">J${m.matchday}</span></div>
+      <div class="match-date">${fmt(m.date)}<br><span style="opacity:.6">${m.competition} · J${m.matchday}</span></div>
       <div class="team-name ${hw?'winner':''}">${m.home_team}</div>
       <div class="score-box">${m.home_score}–${m.away_score}</div>
       <div class="team-name ${aw?'winner':''}" style="text-align:right">${m.away_team}</div>
@@ -749,16 +790,27 @@ function sbar(label, val, total, color) {
 }
 
 // ── STANDINGS ──────────────────────────────────────────────────
+let standingsComp = 'Premier League';
+
+function filterStandingsComp(f, btn) {
+  document.querySelectorAll('#standings-comp-bar .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  standingsComp = f;
+  renderStandings();
+}
+
 function renderStandings() {
   if (!DATA) return;
+  const filtered = DATA.standings.filter(t => t.competition === standingsComp);
+  document.getElementById('standings-badge').textContent = standingsComp;
   const formMap = {};
-  DATA.recent_results.slice(0,200).forEach(m => {
+  DATA.recent_results.filter(m => m.competition === standingsComp).forEach(m => {
     if (!formMap[m.home_team]) formMap[m.home_team] = [];
     if (!formMap[m.away_team]) formMap[m.away_team] = [];
     if (formMap[m.home_team].length < 5) formMap[m.home_team].push(m.result==='H'?'W':m.result==='D'?'D':'L');
     if (formMap[m.away_team].length < 5) formMap[m.away_team].push(m.result==='A'?'W':m.result==='D'?'D':'L');
   });
-  document.getElementById('standings-body').innerHTML = DATA.standings.map(t => {
+  document.getElementById('standings-body').innerHTML = filtered.map(t => {
     const form = (formMap[t.team]||[]).slice(-5);
     return `
     <tr>
