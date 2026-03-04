@@ -1,0 +1,16 @@
+# Football.AI - Dépendances
+# Installe avec : pip install -r requirements.txt
+
+# Bot Discord
+discord.py>=2.3.0
+
+# Serveur web
+flask>=3.0
+flask-cors>=4.0
+
+# Data & IA
+requests>=2.31
+numpy>=1.24
+scipy>=1.11
+scikit-learn>=1.3
+pandas>=2.0

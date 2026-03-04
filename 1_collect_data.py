@@ -22,10 +22,24 @@ import requests
 import sqlite3
 import time
 import json
+import os
 from datetime import datetime, timedelta
 
 # ─── CONFIG ────────────────────────────────────────────────────
-API_KEY = "VOTRE_CLE_API_ICI"  # → https://www.football-data.org/
+
+def _load_env():
+    env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+    if os.path.exists(env_path):
+        with open(env_path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    os.environ.setdefault(k.strip(), v.strip().strip('"').strip("'"))
+
+_load_env()
+
+API_KEY = os.environ.get("FOOTBALL_API_KEY", "VOTRE_CLE_API_ICI")
 DB_PATH = "football.db"
 COMPETITIONS = {
     "PL":  "Premier League",
