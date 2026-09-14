@@ -8,8 +8,20 @@ from sqlalchemy.orm import sessionmaker
 from app import config
 from app.models import Base
 
-_connect_args = {"check_same_thread": False} if config.DATABASE_URL.startswith("sqlite") else {}
-engine = create_engine(config.DATABASE_URL, connect_args=_connect_args, future=True)
+_is_sqlite = config.DATABASE_URL.startswith("sqlite")
+_connect_args = {"check_same_thread": False} if _is_sqlite else {}
+engine = create_engine(
+    config.DATABASE_URL,
+    connect_args=_connect_args,
+    future=True,
+    # pool_pre_ping évite les erreurs "server closed the connection unexpectedly" :
+    # les Postgres hébergés (Render inclus) ferment les connexions inactives après
+    # un moment, et sans ce test la prochaine requête tombe sur une connexion morte
+    # au lieu d'en reprendre une neuve — symptôme typique : "ça marchait il y a une
+    # heure, plus maintenant".
+    pool_pre_ping=True,
+    pool_recycle=280 if not _is_sqlite else -1,
+)
 SessionLocal = sessionmaker(bind=engine, future=True, expire_on_commit=False)
 
 
