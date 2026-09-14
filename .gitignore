@@ -1,6 +1,11 @@
 football.db
+football.db-journal
 __pycache__/
 *.pyc
 .env
 data.json
 .ipynb_checkpoints/
+panels.json
+.pytest_cache/
+*.egg-info/
+.venv/
