@@ -89,6 +89,56 @@
   }
   #last-update { color:var(--accent); }
 
+  /* ── ACCOUNT / MOBILE NAV ── */
+  .account-bar { display:flex; align-items:center; gap:.6rem; font-size:.78rem; }
+  .account-email { color:var(--muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .plan-pill { font-size:.68rem; padding:.2rem .55rem; border-radius:999px; white-space:nowrap; }
+  .plan-pill.premium { background:rgba(0,229,160,.12); color:var(--accent); }
+  .plan-pill.free { background:var(--bg3); color:var(--muted); }
+  .account-bar a, .account-bar button.link-btn {
+    background:none; border:none; color:var(--muted); cursor:pointer;
+    font-family:inherit; font-size:.78rem; text-decoration:none; padding:0;
+  }
+  .account-bar a:hover, .account-bar button.link-btn:hover { color:var(--text); }
+  .menu-toggle {
+    display:none; background:none; border:1px solid var(--border); color:var(--text);
+    width:36px; height:36px; border-radius:8px; cursor:pointer; font-size:1.05rem;
+    align-items:center; justify-content:center; flex-shrink:0;
+  }
+  @media(max-width:900px){
+    .menu-toggle { display:flex; }
+    nav {
+      position:fixed; top:64px; left:0; right:0; z-index:99;
+      background:var(--bg2); border-bottom:1px solid var(--border);
+      flex-direction:column; gap:0; padding:0; max-height:0; overflow:hidden;
+      transition:max-height .25s ease;
+    }
+    header.nav-open nav { max-height:70vh; overflow-y:auto; padding:.5rem; }
+    nav button { width:100%; text-align:left; }
+    .header-meta { display:none; }
+    .account-email { max-width:90px; }
+  }
+
+  /* ── PREMIUM GATING ── */
+  .locked-panel { position:relative; }
+  .locked-panel .locked-content { filter:blur(5px); pointer-events:none; user-select:none; }
+  .locked-overlay {
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:.75rem; text-align:center; padding:1.5rem; background:rgba(10,12,16,.55); border-radius:16px; z-index:2;
+  }
+  .locked-overlay .lock-icon { font-size:1.6rem; }
+  .locked-overlay p { color:var(--muted); font-size:.85rem; max-width:280px; }
+  .upgrade-btn {
+    background:var(--accent); color:#04120c; border:none; padding:.6rem 1.3rem;
+    border-radius:10px; font-weight:700; font-size:.85rem; cursor:pointer;
+  }
+  .free-plan-banner {
+    background:var(--bg2); border:1px solid var(--border); border-radius:12px;
+    padding:.9rem 1.25rem; margin-bottom:1.5rem; display:flex; align-items:center;
+    justify-content:space-between; gap:1rem; flex-wrap:wrap; font-size:.85rem;
+  }
+  .free-plan-banner span { color:var(--muted); }
+
   /* ── LAYOUT ── */
   main { max-width:1400px; margin:0 auto; padding:2rem; position:relative; z-index:1; }
 
@@ -516,23 +566,26 @@
 </head>
 <body>
 
-<header>
+<header id="site-header">
   <div class="header-inner">
-    <div class="logo">
+    <a href="/" class="logo">
       <div class="logo-dot"></div>
       FOOTBALL<span>.AI</span>
-    </div>
-    <nav>
+    </a>
+    <nav id="main-nav">
       <button class="active" onclick="showSection('predictions',this)">Prédictions</button>
       <button onclick="showSection('results',this)">Résultats</button>
       <button onclick="showSection('standings',this)">Classement</button>
       <button onclick="showSection('elo',this)">ELO</button>
+      <button onclick="showSection('fiabilite',this)">Fiabilité</button>
     </nav>
     <div class="header-right">
-      <button class="refresh-btn" id="refresh-btn" onclick="refreshData()">↻ Actualiser</button>
+      <button class="refresh-btn" id="refresh-btn" onclick="refreshData()" style="display:none;">↻ Actualiser</button>
+      <div class="account-bar" id="account-bar"></div>
       <div class="header-meta">
         Mis à jour<br><span id="last-update">—</span>
       </div>
+      <button class="menu-toggle" id="menu-toggle" onclick="toggleNav()" aria-label="Menu">☰</button>
     </div>
   </div>
 </header>
@@ -658,6 +711,46 @@
       </div>
     </div>
   </div>
+
+  <!-- FIABILITE -->
+  <div class="section locked-panel" id="sec-fiabilite">
+    <div id="fiabilite-lock"></div>
+    <div id="fiabilite-content">
+    <div class="kpi-bar" style="margin-bottom:1.5rem;">
+      <div class="kpi-card"><div class="kpi-label">Prédictions notées</div><div class="kpi-value blue" id="rel-total">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Favori correct</div><div class="kpi-value green" id="rel-hitrate">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Score de Brier moyen</div><div class="kpi-value" id="rel-brier">—</div></div>
+      <div class="kpi-card"><div class="kpi-label">Dernier recalibrage</div><div class="kpi-value red" id="rel-updated" style="font-size:1.1rem;">—</div></div>
+    </div>
+    <div class="two-col">
+      <div class="panel">
+        <div class="panel-header">
+          <div class="panel-title">🎯 Fiabilité par compétition</div>
+          <span class="badge">Notation automatique</span>
+        </div>
+        <div style="overflow-x:auto;">
+          <table class="standings-table">
+            <thead>
+              <tr><th>Compétition</th><th class="right">Échantillon</th><th class="right">Favori correct</th><th class="right">Brier moyen</th></tr>
+            </thead>
+            <tbody id="rel-comp-body">
+              <tr><td colspan="4"><div class="loading"><div class="spinner"></div></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><div class="panel-title">📈 Évolution du score de Brier</div></div>
+        <div id="rel-trend" style="padding:1.25rem;font-family:'JetBrains Mono',monospace;font-size:.8rem;"></div>
+      </div>
+    </div>
+    <p style="margin-top:1rem;color:var(--muted);font-size:.8rem;line-height:1.6;">
+      Le score de Brier mesure l'écart entre les probabilités annoncées et le résultat réel (0 = parfait, plus bas = mieux).
+      Le moteur compare automatiquement chaque prédiction au résultat une fois le match terminé, puis recalibre
+      ses paramètres (ELO, avantage domicile, confiance) pour réduire cette erreur au fil du temps.
+    </p>
+    </div>
+  </div>
 </main>
 
 <!-- MODAL -->
@@ -666,13 +759,39 @@
 </div>
 
 <script>
-const API = "http://localhost:5000/api";
+const API = "/api";
 let DATA = null;
+let ME = null;
 let predFilter = 'all';
 let compFilter = 'all';
 let resFilter  = 'all';
 let resCompFilter = 'all';
 let pollTimer  = null;
+
+// ── COMPTE / NAV MOBILE ──────────────────────────────────────────
+function toggleNav() {
+  document.getElementById('site-header').classList.toggle('nav-open');
+}
+
+async function doLogout() {
+  await fetch('/auth/logout', { method: 'POST' });
+  location.href = '/';
+}
+
+async function loadAccount() {
+  const data = await fetch(`${API}/me`).then(r => r.json());
+  ME = data.user;
+  if (!ME) { location.href = '/login?next=/app'; return; }
+
+  const bar = document.getElementById('account-bar');
+  bar.innerHTML = `
+    <span class="account-email">${ME.email}</span>
+    <span class="plan-pill ${ME.is_premium || ME.is_admin ? 'premium' : 'free'}">${ME.is_premium || ME.is_admin ? 'Premium' : 'Gratuit'}</span>
+    ${ME.is_admin ? '<a href="/admin">Admin</a>' : ''}
+    <button class="link-btn" onclick="doLogout()">Déconnexion</button>
+  `;
+  if (ME.is_admin) document.getElementById('refresh-btn').style.display = '';
+}
 
 // ── LOAD & POLL ────────────────────────────────────────────────
 async function loadData() {
@@ -686,6 +805,7 @@ async function loadData() {
     }
 
     const resp = await fetch(`${API}/data`);
+    if (resp.status === 401) { location.href = '/login?next=/app'; return; }
     if (!resp.ok) throw new Error("HTTP " + resp.status);
     DATA = await resp.json();
     clearTimeout(pollTimer); pollTimer = null;
@@ -707,7 +827,7 @@ function showError() {
       <div style="font-size:2rem;margin-bottom:.5rem">⚠️</div>
       <strong>Serveur non démarré</strong>
       <p style="margin-top:.5rem;font-size:.85rem;color:var(--muted)">Lance cette commande dans un terminal :</p>
-      <code>pip install flask flask-cors numpy scipy scikit-learn<br><br>python server.py</code>
+      <code>pip install -r requirements.txt<br><br>python main.py</code>
       <p style="margin-top:.75rem;font-size:.75rem;color:var(--muted)">
         Puis ouvre <strong style="color:var(--accent)">http://localhost:5000</strong>
       </p>
@@ -736,11 +856,109 @@ function initAll() {
   document.getElementById('kpi-season').textContent = meta.season;
   document.getElementById('last-update').textContent =
     new Date(meta.generated_at).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+  renderFreePlanBanner();
   renderPredictions();
   renderResultsList();
   renderSeasonStats();
   renderStandings();
   renderElo();
+  loadModelPerformance();
+}
+
+// ── GATING FREEMIUM ────────────────────────────────────────────
+function renderFreePlanBanner() {
+  const existing = document.getElementById('free-plan-banner');
+  if (existing) existing.remove();
+  const access = DATA.access || { full_access: true };
+  if (access.full_access) return;
+
+  const banner = document.createElement('div');
+  banner.className = 'free-plan-banner';
+  banner.id = 'free-plan-banner';
+  banner.innerHTML = `
+    <span>Compte gratuit — accès limité à ${(access.free_competitions || []).join(', ')}. Les conseils de paris, l'analyse avancée et la fiabilité du modèle sont réservés au premium.</span>
+    <button class="upgrade-btn" onclick="showSection('fiabilite', document.querySelector('nav button:last-child'))">Demander l'accès premium</button>
+  `;
+  document.querySelector('main').prepend(banner);
+}
+
+function lockPanel(lockElId, contentElId, message) {
+  const lockEl = document.getElementById(lockElId);
+  const contentEl = document.getElementById(contentElId);
+  if (ME && (ME.is_premium || ME.is_admin)) {
+    lockEl.innerHTML = '';
+    contentEl.classList.remove('locked-content');
+    return false;
+  }
+  contentEl.classList.add('locked-content');
+  lockEl.innerHTML = `
+    <div class="locked-overlay">
+      <div class="lock-icon">🔒</div>
+      <p>${message}</p>
+      <a class="upgrade-btn" href="/#pricing" target="_blank" rel="noopener">Demander l'accès premium</a>
+    </div>`;
+  return true;
+}
+
+// ── FIABILITÉ / AUTO-APPRENTISSAGE ────────────────────────────
+async function loadModelPerformance() {
+  if (lockPanel('fiabilite-lock', 'fiabilite-content', 'La page Fiabilité du modèle (score de Brier, taux de réussite) est réservée aux comptes premium.')) return;
+  try {
+    const resp = await fetch(`${API}/model-performance`);
+    if (!resp.ok) throw new Error("HTTP " + resp.status);
+    const perf = await resp.json();
+    renderModelPerformance(perf);
+  } catch (e) {
+    document.getElementById('rel-comp-body').innerHTML =
+      `<tr><td colspan="4" style="color:var(--muted)">Pas encore assez de matchs joués pour évaluer le modèle.</td></tr>`;
+  }
+}
+
+function renderModelPerformance(perf) {
+  document.getElementById('rel-total').textContent = perf.total_predictions_scored ?? 0;
+  document.getElementById('rel-hitrate').textContent =
+    perf.favorite_hit_rate != null ? `${Math.round(perf.favorite_hit_rate * 100)}%` : '—';
+
+  const briers = (perf.by_competition || []).map(c => c.avg_brier_score).filter(v => v != null);
+  const avgBrier = briers.length ? (briers.reduce((a, b) => a + b, 0) / briers.length) : null;
+  document.getElementById('rel-brier').textContent = avgBrier != null ? avgBrier.toFixed(3) : '—';
+
+  const lastUpdate = (perf.model_params || [])
+    .map(p => p.updated_at).filter(Boolean).sort().pop();
+  document.getElementById('rel-updated').textContent = lastUpdate
+    ? new Date(lastUpdate).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : '—';
+
+  const compBody = document.getElementById('rel-comp-body');
+  if (!perf.by_competition || !perf.by_competition.length) {
+    compBody.innerHTML = `<tr><td colspan="4" style="color:var(--muted)">Aucune donnée pour le moment.</td></tr>`;
+  } else {
+    compBody.innerHTML = perf.by_competition.map(c => `
+      <tr>
+        <td>${c.competition}</td>
+        <td class="right">${c.sample_size}</td>
+        <td class="right">${c.favorite_hit_rate != null ? Math.round(c.favorite_hit_rate * 100) + '%' : '—'}</td>
+        <td class="right">${c.avg_brier_score != null ? c.avg_brier_score.toFixed(3) : '—'}</td>
+      </tr>`).join('');
+  }
+
+  const trendEl = document.getElementById('rel-trend');
+  if (!perf.brier_trend_by_month || !perf.brier_trend_by_month.length) {
+    trendEl.innerHTML = `<span style="color:var(--muted)">Pas encore d'historique mensuel.</span>`;
+  } else {
+    const maxBrier = Math.max(...perf.brier_trend_by_month.map(t => t.avg_brier_score), 0.01);
+    trendEl.innerHTML = perf.brier_trend_by_month.map(t => {
+      const pct = Math.round((t.avg_brier_score / maxBrier) * 100);
+      return `<div style="margin-bottom:.5rem;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:.2rem;">
+          <span>${t.month}</span><span>${t.avg_brier_score.toFixed(3)} (n=${t.n})</span>
+        </div>
+        <div style="background:var(--bg3);border-radius:4px;height:6px;overflow:hidden;">
+          <div style="width:${pct}%;height:100%;background:var(--accent3);"></div>
+        </div>
+      </div>`;
+    }).join('');
+  }
 }
 
 function animateNumber(id, target) {
@@ -833,7 +1051,8 @@ function renderPredictions() {
         ${ah.xg_per90>0 ? `<span class="adv-pill xg">xG ${ah.xg_per90} vs ${aa.xg_per90||'?'}</span>` : ''}
         ${ah.pressing_intensity>0 ? `<span class="adv-pill press">Press. ${Math.round(ah.pressing_intensity)} vs ${Math.round(aa.pressing_intensity||0)}</span>` : ''}
         ${ah.defensive_solidity>0 ? `<span class="adv-pill def">Def. ${Math.round(ah.defensive_solidity)} vs ${Math.round(aa.defensive_solidity||0)}</span>` : ''}
-      </div>` : ''}
+      </div>` : (ME && !ME.is_premium && !ME.is_admin ? `
+      <div class="adv-row"><span class="adv-pill" style="color:var(--muted)">🔒 xG &amp; pressing — premium</span></div>` : '')}
       ${hasInjuries ? `<div class="adv-row">${
         ih.length > 0 ? `<span class="adv-pill inj">${ih.length} absent(s) ${p.home_team.split(' ').pop()}</span>` : ''
       }${ia.length > 0 ? `<span class="adv-pill inj">${ia.length} absent(s) ${p.away_team.split(' ').pop()}</span>` : ''}</div>` : ''}
@@ -1266,6 +1485,7 @@ function showSection(name, btn) {
   document.getElementById('sec-' + name).classList.add('active');
   if (btn) btn.classList.add('active');
   else document.querySelector(`nav button[onclick*="${name}"]`)?.classList.add('active');
+  document.getElementById('site-header').classList.remove('nav-open');
 }
 
 // ── UTILS ─────────────────────────────────────────────────────
@@ -1279,7 +1499,7 @@ document.addEventListener('keydown', e => {
 });
 
 // Init
-loadData();
+(async () => { await loadAccount(); loadData(); })();
 </script>
 </body>
 </html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connexion — FOOTBALL.AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c10; --bg2: #0f1218; --bg3: #161b24;
+    --border: rgba(255,255,255,0.08);
+    --accent: #00e5a0; --accent2: #ff4b6e;
+    --text: #e8eaf0; --muted: #8a90a0;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg); color: var(--text); font-family:'DM Sans',sans-serif;
+    min-height:100vh; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:1.5rem;
+  }
+  a { color:var(--accent); text-decoration:none; }
+  .logo { font-family:'Bebas Neue',sans-serif; font-size:1.8rem; letter-spacing:.05em; margin-bottom:2rem; display:flex; align-items:center; gap:.5rem; }
+  .logo span { color:var(--accent); }
+  .logo-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); }
+
+  .card { background:var(--bg2); border:1px solid var(--border); border-radius:20px; padding:2rem; width:100%; max-width:400px; }
+  .tabs { display:flex; background:var(--bg3); border-radius:10px; padding:4px; margin-bottom:1.5rem; }
+  .tab { flex:1; text-align:center; padding:.55rem; border-radius:8px; cursor:pointer; font-size:.85rem; font-weight:600; color:var(--muted); }
+  .tab.active { background:var(--accent); color:#04120c; }
+
+  .form-field { margin-bottom:1rem; }
+  .form-field label { display:block; font-size:.8rem; color:var(--muted); margin-bottom:.4rem; }
+  .form-field input {
+    width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:10px;
+    padding:.7rem .9rem; color:var(--text); font-family:inherit; font-size:.9rem;
+  }
+  .btn { width:100%; padding:.75rem; border-radius:10px; border:none; background:var(--accent); color:#04120c;
+    font-weight:700; font-size:.95rem; cursor:pointer; margin-top:.5rem; }
+  .btn:disabled { opacity:.5; cursor:default; }
+  .msg { font-size:.85rem; margin-top:.85rem; min-height:1.2em; text-align:center; }
+  .msg.err { color:var(--accent2); }
+  .back { margin-top:1.5rem; font-size:.85rem; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<a href="/" class="logo"><div class="logo-dot"></div>FOOTBALL<span>.AI</span></a>
+
+<div class="card">
+  <div class="tabs">
+    <div class="tab" id="tab-login" onclick="setMode('login')">Connexion</div>
+    <div class="tab" id="tab-register" onclick="setMode('register')">Inscription</div>
+  </div>
+
+  <form id="auth-form">
+    <div class="form-field">
+      <label for="email">Email</label>
+      <input id="email" type="email" required autocomplete="email">
+    </div>
+    <div class="form-field">
+      <label for="password">Mot de passe</label>
+      <input id="password" type="password" required autocomplete="current-password" minlength="8">
+    </div>
+    <button class="btn" type="submit" id="submit-btn">Se connecter</button>
+    <div class="msg" id="msg"></div>
+  </form>
+</div>
+
+<div class="back"><a href="/">&larr; Retour à l'accueil</a></div>
+
+<script>
+const params = new URLSearchParams(location.search);
+let mode = params.get('mode') === 'register' ? 'register' : 'login';
+
+function setMode(m) {
+  mode = m;
+  document.getElementById('tab-login').classList.toggle('active', m === 'login');
+  document.getElementById('tab-register').classList.toggle('active', m === 'register');
+  document.getElementById('submit-btn').textContent = m === 'login' ? 'Se connecter' : 'Créer mon compte';
+  document.getElementById('password').setAttribute('autocomplete', m === 'login' ? 'current-password' : 'new-password');
+  document.getElementById('msg').textContent = '';
+}
+setMode(mode);
+
+document.getElementById('auth-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = document.getElementById('submit-btn');
+  const msgEl = document.getElementById('msg');
+  const payload = {
+    email: document.getElementById('email').value,
+    password: document.getElementById('password').value,
+  };
+  btn.disabled = true;
+  msgEl.className = 'msg';
+  msgEl.textContent = '';
+  try {
+    const resp = await fetch(`/auth/${mode}`, {
+      method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload)
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || 'Erreur');
+    const next = params.get('next') || '/app';
+    location.href = next;
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.className = 'msg err';
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
