@@ -176,8 +176,10 @@ def compute_advanced_metrics(team, finished, reference_date=None):
 
 
 def get_team_lineups(team, session):
+    """Un seul aller-retour base (jointure incluant la formation) au lieu de deux —
+    important quand la base est distante (Postgres en production)."""
     rows = (
-        session.query(Lineup, Match.date)
+        session.query(Lineup, Match.date, Match.home_team, Match.home_formation, Match.away_formation)
         .join(Match, Lineup.match_id == Match.id)
         .filter(Lineup.team == team)
         .order_by(Match.date.desc())
@@ -188,17 +190,13 @@ def get_team_lineups(team, session):
 
     last_match_id = rows[0][0].match_id
     last_date = rows[0][1]
+    formation = rows[0][3] if rows[0][2] == team else rows[0][4]
     starters, subs = [], []
-    for lineup, date in rows:
+    for lineup, date, home_team, home_formation, away_formation in rows:
         if lineup.match_id != last_match_id:
             break
         entry = {"name": lineup.player_name, "position": lineup.position}
         (starters if lineup.is_starter else subs).append(entry)
-
-    match = session.get(Match, last_match_id)
-    formation = None
-    if match:
-        formation = match.home_formation if match.home_team == team else match.away_formation
 
     return {"available": len(starters) > 0, "starters": starters, "subs": subs,
             "formation": formation, "date": last_date, "match_id": last_match_id}

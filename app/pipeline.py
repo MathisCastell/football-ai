@@ -17,7 +17,7 @@ from app.models import EloRating as EloRatingModel
 from app.models import Match, Prediction
 from app.prediction.elo import EloRating
 from app.prediction.features import (
-    compute_advanced_metrics, compute_confidence, get_form, get_h2h,
+    compute_advanced_metrics, compute_confidence, get_form, get_h2h, get_rest_days,
     get_team_injuries, get_team_lineups,
 )
 from app.prediction.poisson import build_poisson, predict_match_advanced
@@ -97,6 +97,19 @@ def _generate_predictions(session):
     all_teams = set(m["home_team"] for m in all_matches) | set(m["away_team"] for m in all_matches)
     teams_adv = {t: compute_advanced_metrics(t, finished) for t in all_teams}
 
+    # Une requête base par équipe (pas par match) : avec ~100 équipes vs. ~1500 matchs
+    # programmés, ça évite des milliers d'allers-retours réseau vers Postgres en prod.
+    lineups_by_team = {t: get_team_lineups(t, session) for t in all_teams}
+    injuries_by_team = {t: get_team_injuries(t, session) for t in all_teams}
+
+    # Même logique pour les prédictions : une requête pour toutes plutôt qu'un
+    # session.get() par match (qui vaudrait ~1500 allers-retours réseau).
+    scheduled_ids = [m["id"] for m in scheduled]
+    existing_predictions = {
+        p.match_id: p
+        for p in session.query(Prediction).filter(Prediction.match_id.in_(scheduled_ids)).all()
+    } if scheduled_ids else {}
+
     for m in scheduled:
         comp = m["competition"]
         home, away = m["home_team"], m["away_team"]
@@ -110,8 +123,8 @@ def _generate_predictions(session):
 
         adv_h = dict(teams_adv.get(home) or compute_advanced_metrics(home, finished))
         adv_a = dict(teams_adv.get(away) or compute_advanced_metrics(away, finished))
-        adv_h["rest_days"] = compute_advanced_metrics(home, finished, reference_date=m["date"])["rest_days"]
-        adv_a["rest_days"] = compute_advanced_metrics(away, finished, reference_date=m["date"])["rest_days"]
+        adv_h["rest_days"] = get_rest_days(home, finished, m["date"])
+        adv_a["rest_days"] = get_rest_days(away, finished, m["date"])
 
         pp = predict_match_advanced(home, away, attack, defense, avg, home_adv, adv_h, adv_a)
 
@@ -124,10 +137,10 @@ def _generate_predictions(session):
         fa_away = get_form(away, comp_finished, venue="away")
         h2h = get_h2h(home, away, comp_finished)
 
-        lineup_h = get_team_lineups(home, session)
-        lineup_a = get_team_lineups(away, session)
-        injuries_h = get_team_injuries(home, session)
-        injuries_a = get_team_injuries(away, session)
+        lineup_h = lineups_by_team.get(home, {"available": False, "starters": [], "subs": [], "formation": None, "date": None})
+        lineup_a = lineups_by_team.get(away, {"available": False, "starters": [], "subs": [], "formation": None, "date": None})
+        injuries_h = injuries_by_team.get(home, [])
+        injuries_a = injuries_by_team.get(away, [])
 
         conf = compute_confidence(pp, elo.get(home), elo.get(away), fh_global, fa_global, h2h, adv_h, adv_a)
         probs = {"home": pp["home_win"], "draw": pp["draw"], "away": pp["away_win"]}
@@ -151,19 +164,27 @@ def _generate_predictions(session):
             "generated_at": datetime.now().isoformat(),
         }
 
-        row = session.get(Prediction, m["id"])
+        row = existing_predictions.get(m["id"])
         if row is None:
             row = Prediction(match_id=m["id"])
             session.add(row)
+            existing_predictions[m["id"]] = row
         row.prediction_json = json.dumps(pred, ensure_ascii=False)
         row.generated_at = pred["generated_at"]
 
+    all_elo_teams = {team for elo in elo_by_competition.values() for team in elo.ratings}
+    existing_elo = {
+        e.team: e
+        for e in session.query(EloRatingModel).filter(EloRatingModel.team.in_(all_elo_teams)).all()
+    } if all_elo_teams else {}
+
     for comp, elo in elo_by_competition.items():
         for team, rating in elo.ratings.items():
-            row = session.get(EloRatingModel, team)
+            row = existing_elo.get(team)
             if row is None:
                 row = EloRatingModel(team=team)
                 session.add(row)
+                existing_elo[team] = row
             row.rating = round(rating)
             row.updated_at = datetime.now().isoformat()
 
